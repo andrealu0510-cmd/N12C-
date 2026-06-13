@@ -1,0 +1,486 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>北一二C 即時回報</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.2/babel.min.js"></script>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0;}
+  body{background:#0D0F14;color:#E2E8F0;font-family:'Courier New',monospace;}
+  input[type=number]::-webkit-inner-spin-button,
+  input[type=number]::-webkit-outer-spin-button{opacity:1;}
+  input,select{color:#E2E8F0 !important;background:#0D1117 !important;}
+  input::placeholder{color:#374151;}
+  select option{background:#131720;color:#E2E8F0;}
+  @keyframes ticker{from{transform:translateX(0)}to{transform:translateX(-50%)}}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  ::-webkit-scrollbar{width:4px;height:4px;}
+  ::-webkit-scrollbar-track{background:#0D0F14;}
+  ::-webkit-scrollbar-thumb{background:#2D3748;border-radius:2px;}
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+//  Cloudflare Workers 版本 — 網址已填入
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+const API_URL = "https://north12c-report.n12c.workers.dev";
+
+const C={
+  bg:"#0D0F14",panel:"#131720",panelAlt:"#181D27",
+  border:"#1F2937",borderBrt:"#2D3748",headerBg:"#0A0C12",
+  accent:"#F59E0B",accentDim:"#92400E",
+  textPri:"#E2E8F0",textSec:"#64748B",textDim:"#374151",
+  rise:"#F04D4D",riseDim:"#7F1D1D",riseBg:"#1A0A0A",
+  fall:"#00C078",fallDim:"#064E3B",fallBg:"#041A10",
+  neutral:"#94A3B8",inputBg:"#0D1117",
+};
+
+const STORES={
+  medium:["台北忠孝東","台北新站前","台北天母"],
+  small:["台北南京東","台北東區","台北公館","士林夜市","天母德行東","台北後山埤"],
+};
+const ALL_STORES=[...STORES.medium,...STORES.small];
+const isMedium=s=>STORES.medium.includes(s);
+
+const TARGETS={
+  AQ999:{medium:2,small:1},AQ1399:{medium:2,small:1},
+  RT999:{medium:6,small:5},RT1399:{medium:4,small:3},
+  tewei:{medium:4,small:3},
+  accessory:{medium:6000,small:4500},film:{medium:2800,small:1800},
+  insurance:{medium:50,small:50},
+};
+const getTarget=(key,store)=>{const t=TARGETS[key];if(!t)return null;return isMedium(store)?t.medium:t.small;};
+const meetsTarget=(key,val,store)=>{
+  const target=getTarget(key,store);
+  if(target===null||val===""||val===undefined||val===null)return null;
+  const n=parseFloat(val);if(isNaN(n))return null;return n>=target;
+};
+
+const ITEMS=[
+  {key:"AQ999",label:"AQ999",type:"number",unit:"件",hasTarget:true},
+  {key:"AQ1399",label:"AQ1399",type:"number",unit:"件",hasTarget:true},
+  {key:"broadband",label:"寬頻",type:"number",unit:"件",hasTarget:false},
+  {key:"tewei",label:"特維",type:"number",unit:"件",hasTarget:true},
+  {key:"RT999",label:"RT999",type:"number",unit:"件",hasTarget:true},
+  {key:"RT1399",label:"RT1399",type:"number",unit:"件",hasTarget:true},
+  {key:"device_case",label:"設備案/門號案",type:"device",unit:"",hasTarget:false},
+  {key:"insurance",label:"保險搭售率",type:"insur",unit:"%",hasTarget:true},
+  {key:"accessory",label:"配件",type:"number",unit:"元",hasTarget:true},
+  {key:"film",label:"包膜",type:"number",unit:"元",hasTarget:true},
+  {key:"video_kkbox",label:"Video+KKBOX",type:"number",unit:"件",hasTarget:false},
+  {key:"apple_service",label:"APPLE服務",type:"number",unit:"件",hasTarget:false},
+  {key:"hbo",label:"HBO",type:"number",unit:"件",hasTarget:false},
+  {key:"nf_p",label:"NF/P",type:"number",unit:"件",hasTarget:false},
+];
+
+const todayStr=()=>new Date().toISOString().slice(0,10);
+const emptyForm=()=>({...Object.fromEntries(ITEMS.map(i=>[i.key,""])),device_count:"",insurance_count:""});
+
+// ── API helpers (Cloudflare Workers) ──────────────────────
+async function apiGet(date){
+  const r=await fetch(`${API_URL}/data?date=${date}`);
+  if(!r.ok)throw new Error("GET failed");
+  return r.json();
+}
+async function apiPost(date,store,form){
+  const r=await fetch(`${API_URL}/data`,{
+    method:"POST",
+    headers:{"Content-Type":"application/json"},
+    body:JSON.stringify({date,store,form}),
+  });
+  if(!r.ok)throw new Error("POST failed");
+  return r.json();
+}
+
+// ── Components ────────────────────────────────────────────
+function Badge({met,size=15}){
+  if(met===null)return<span style={{color:C.textDim,fontSize:size}}>—</span>;
+  return met
+    ?<span style={{fontSize:size,color:C.rise,fontWeight:900}}>▲</span>
+    :<span style={{fontSize:size,color:C.fall,fontWeight:900}}>▼</span>;
+}
+function StockTab({active,onClick,children}){
+  return<button onClick={onClick} style={{
+    padding:"5px 14px",borderRadius:2,
+    background:active?C.accent:"transparent",color:active?"#000":C.textSec,
+    border:`1px solid ${active?C.accent:C.border}`,
+    fontWeight:active?900:400,fontSize:11,cursor:"pointer",letterSpacing:1,
+    fontFamily:"'Courier New',monospace"
+  }}>{children}</button>;
+}
+function Panel({children,noPad}){
+  return<div style={{background:C.panel,border:`1px solid ${C.border}`,borderRadius:4,marginBottom:12,padding:noPad?0:"14px 16px"}}>{children}</div>;
+}
+function FG({label,children,style}){
+  return<div style={style}>
+    <div style={{fontSize:9,color:C.textSec,letterSpacing:2,marginBottom:4,textTransform:"uppercase"}}>{label}</div>
+    {children}
+  </div>;
+}
+function Spinner(){
+  return<span style={{display:"inline-block",width:12,height:12,border:`2px solid ${C.accent}`,
+    borderTopColor:"transparent",borderRadius:"50%",animation:"spin 0.7s linear infinite",verticalAlign:"middle",marginRight:6}}/>;
+}
+function NetBadge({status}){
+  const map={ok:[C.rise,"LIVE"],loading:[C.accent,"SYNC..."],error:[C.fall,"OFFLINE"]};
+  const[col,txt]=map[status]||map.ok;
+  return<span style={{fontSize:9,color:col,letterSpacing:1}}>
+    {status==="loading"&&<Spinner/>}{txt}
+  </span>;
+}
+
+const SI={width:"100%",padding:"7px 9px",background:C.inputBg,border:`1px solid ${C.borderBrt}`,
+  borderRadius:3,fontSize:12,color:C.textPri,boxSizing:"border-box",outline:"none",fontFamily:"'Courier New',monospace"};
+const STH={padding:"8px 10px",background:C.headerBg,color:C.textSec,fontWeight:700,textAlign:"center",
+  border:`1px solid ${C.border}`,fontSize:10,letterSpacing:1,whiteSpace:"nowrap"};
+const STD={padding:"7px 10px",border:`1px solid ${C.border}`,fontSize:11,color:C.textPri,verticalAlign:"middle"};
+
+// ── Main App ──────────────────────────────────────────────
+function App(){
+  const{useState,useEffect,useCallback}=React;
+  const[view,setView]=useState("input");
+  const[store,setStore]=useState("");
+  const[date,setDate]=useState(todayStr());
+  const[form,setForm]=useState(emptyForm());
+  const[allData,setAllData]=useState({});
+  const[saving,setSaving]=useState(false);
+  const[saved,setSaved]=useState(false);
+  const[netStatus,setNetStatus]=useState("ok");
+  const[sumDate,setSumDate]=useState(todayStr());
+  const[now,setNow]=useState("");
+  const[lastSync,setLastSync]=useState("");
+
+  useEffect(()=>{
+    const tick=()=>setNow(new Date().toLocaleTimeString("zh-TW",{hour:"2-digit",minute:"2-digit",second:"2-digit",hour12:false}));
+    tick();const id=setInterval(tick,1000);return()=>clearInterval(id);
+  },[]);
+
+  const loadDate=useCallback(async(d)=>{
+    setNetStatus("loading");
+    try{
+      const data=await apiGet(d);
+      setAllData(prev=>({...prev,[d]:data}));
+      setLastSync(new Date().toLocaleTimeString("zh-TW",{hour:"2-digit",minute:"2-digit",hour12:false}));
+      setNetStatus("ok");
+    }catch{setNetStatus("error");}
+  },[]);
+
+  useEffect(()=>{loadDate(date);},[date]);
+  useEffect(()=>{if(sumDate!==date)loadDate(sumDate);},[sumDate]);
+  // Auto-refresh every 60s
+  useEffect(()=>{
+    const id=setInterval(()=>{loadDate(date);if(sumDate!==date)loadDate(sumDate);},60000);
+    return()=>clearInterval(id);
+  },[date,sumDate]);
+
+  useEffect(()=>{
+    if(store&&date){
+      const ex=allData?.[date]?.[store];
+      setForm(ex?{...emptyForm(),...ex}:emptyForm());
+      setSaved(false);
+    }
+  },[store,date,allData]);
+
+  const handleSave=async()=>{
+    if(!store||saving)return;
+    setSaving(true);setNetStatus("loading");
+    try{
+      await apiPost(date,store,form);
+      setAllData(prev=>({...prev,[date]:{...(prev[date]||{}),[store]:{...form}}}));
+      setSaved(true);setNetStatus("ok");
+      setLastSync(new Date().toLocaleTimeString("zh-TW",{hour:"2-digit",minute:"2-digit",hour12:false}));
+    }catch{setNetStatus("error");alert("儲存失敗，請確認網路連線。");}
+    finally{setSaving(false);}
+  };
+
+  const sumEnt=allData?.[sumDate]||{};
+  const filled=ALL_STORES.filter(s=>sumEnt[s]);
+  const missing=ALL_STORES.filter(s=>!sumEnt[s]);
+  const sumItem=key=>{let t=0,h=false;ALL_STORES.forEach(s=>{const v=sumEnt[s]?.[key];if(v!==""&&v!==undefined){const n=parseFloat(v);if(!isNaN(n)){t+=n;h=true;}}});return h?t:null;};
+  const filledCount=Object.keys(allData?.[date]||{}).length;
+  const targetLabel=(key,st)=>{const t=getTarget(key,st);if(t===null)return"";if(key==="insurance")return`目標 ≥${t}%`;const item=ITEMS.find(i=>i.key===key);return`目標 ${t}${item?.unit||""}`;};
+  const tickerText=ALL_STORES.map(s=>{const done=!!allData?.[date]?.[s];return`${done?"▲":"▼"} ${s}（${isMedium(s)?"中":"小"}）`;}).join("  ·  ")+"  ·  回填進度 "+filledCount+"/9 家  ·  ";
+
+  return(
+    <div style={{fontFamily:"'Courier New',monospace",background:C.bg,minHeight:"100vh",paddingBottom:48,color:C.textPri}}>
+
+      {/* HEADER */}
+      <div style={{background:C.headerBg,borderBottom:`1px solid ${C.borderBrt}`,padding:"10px 20px",display:"flex",alignItems:"center",justifyContent:"space-between",flexWrap:"wrap",gap:8}}>
+        <div style={{display:"flex",alignItems:"center",gap:16}}>
+          <div>
+            <div style={{fontSize:9,color:C.textSec,letterSpacing:3}}>北一二C · NORTH DISTRICT</div>
+            <div style={{fontSize:17,fontWeight:900,color:C.accent,letterSpacing:2}}>北一二C 即時回報</div>
+          </div>
+          <div style={{width:1,height:32,background:C.border}}/>
+          <div>
+            <div style={{marginBottom:2}}><NetBadge status={netStatus}/></div>
+            <div style={{color:C.accent,fontWeight:700,fontSize:12,letterSpacing:1}}>{now}</div>
+          </div>
+          {lastSync&&<div style={{fontSize:9,color:C.textDim}}>上次同步 {lastSync}</div>}
+        </div>
+        <div style={{display:"flex",gap:6}}>
+          <StockTab active={view==="input"} onClick={()=>setView("input")}>回填 INPUT</StockTab>
+          <StockTab active={view==="summary"} onClick={()=>setView("summary")}>彙整 BOARD</StockTab>
+        </div>
+      </div>
+
+      {/* TICKER */}
+      <div style={{background:"#0A0C10",borderBottom:`1px solid ${C.border}`,padding:"4px 0",overflow:"hidden",whiteSpace:"nowrap"}}>
+        <span style={{display:"inline-block",animation:"ticker 28s linear infinite",fontSize:11,color:C.textSec}}>
+          {tickerText+tickerText}
+        </span>
+      </div>
+
+      <div style={{maxWidth:760,margin:"0 auto",padding:"16px 14px 0"}}>
+
+        {view==="input"&&<>
+          <Panel>
+            <div style={{display:"flex",alignItems:"center",gap:12,flexWrap:"wrap"}}>
+              <FG label="DATE 日期" style={{flex:"0 0 150px"}}>
+                <input type="date" value={date} onChange={e=>{setDate(e.target.value);setSaved(false);}} style={SI}/>
+              </FG>
+              <FG label="STORE 店別" style={{flex:1,minWidth:160}}>
+                <select value={store} onChange={e=>setStore(e.target.value)} style={SI}>
+                  <option value="">── 請選擇 ──</option>
+                  <optgroup label="▌ 中型店">{STORES.medium.map(s=><option key={s} value={s}>{s}</option>)}</optgroup>
+                  <optgroup label="▌ 小型店">{STORES.small.map(s=><option key={s} value={s}>{s}</option>)}</optgroup>
+                </select>
+              </FG>
+              {store&&<div style={{padding:"6px 12px",border:`1px solid ${isMedium(store)?C.accent:C.fall}`,borderRadius:4,fontSize:12}}>
+                <span style={{color:isMedium(store)?C.accent:C.fall,fontWeight:700}}>{isMedium(store)?"● 中型":"● 小型"}</span>
+                <span style={{color:C.textPri,marginLeft:6}}>{store}</span>
+                <span style={{color:allData?.[date]?.[store]?C.rise:C.textSec,marginLeft:8,fontSize:10}}>
+                  {allData?.[date]?.[store]?"▲ 已回填":"○ 待填"}
+                </span>
+              </div>}
+            </div>
+          </Panel>
+
+          <Panel noPad>
+            <div style={{padding:"8px 12px",borderBottom:`1px solid ${C.border}`,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+              <span style={{fontSize:10,color:C.textSec,letterSpacing:2}}>DAILY PROGRESS — {date}</span>
+              <div style={{display:"flex",alignItems:"center",gap:10}}>
+                <button onClick={()=>loadDate(date)} style={{background:"transparent",border:`1px solid ${C.border}`,color:C.textSec,
+                  borderRadius:3,fontSize:9,padding:"2px 8px",cursor:"pointer",letterSpacing:1}}>
+                  {netStatus==="loading"?<Spinner/>:"↻"} REFRESH
+                </button>
+                <span style={{fontSize:11}}>
+                  <span style={{display:"inline-block",width:7,height:7,borderRadius:"50%",
+                    background:filledCount===9?C.rise:filledCount>4?C.accent:C.fall,marginRight:5,verticalAlign:"middle"}}/>
+                  <span style={{color:filledCount===9?C.rise:C.accent}}>{filledCount}</span>
+                  <span style={{color:C.textSec}}>/9</span>
+                </span>
+              </div>
+            </div>
+            <div style={{display:"flex",flexWrap:"wrap"}}>
+              {ALL_STORES.map(s=>{
+                const done=!!allData?.[date]?.[s];const active=s===store;
+                return<button key={s} onClick={()=>{setStore(s);window.scrollTo({top:0,behavior:"smooth"});}}
+                  style={{flex:"1 1 33%",padding:"7px 10px",border:"none",
+                    borderRight:`1px solid ${C.border}`,borderBottom:`1px solid ${C.border}`,
+                    borderLeft:active?`2px solid ${C.accent}`:"2px solid transparent",
+                    background:active?C.panelAlt:"transparent",cursor:"pointer",textAlign:"left"}}>
+                  <span style={{fontSize:10,color:done?C.rise:C.fall,marginRight:5}}>{done?"▲":"▼"}</span>
+                  <span style={{fontSize:11,color:active?C.accent:C.textPri}}>{s}</span>
+                  <span style={{fontSize:9,color:C.textSec,marginLeft:4}}>{isMedium(s)?"中":"小"}</span>
+                </button>;
+              })}
+            </div>
+          </Panel>
+
+          {store&&<Panel>
+            <div style={{fontSize:10,color:C.textSec,letterSpacing:2,marginBottom:14}}>INPUT ITEMS — {store} · {isMedium(store)?"中型店":"小型店"}</div>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"10px 14px"}}>
+              {ITEMS.map(item=>{
+                const tLabel=targetLabel(item.key,store);
+                if(item.type==="device"){
+                  const d=parseFloat(form.device_count),c=parseFloat(form.device_case);
+                  const ratio=(!isNaN(d)&&!isNaN(c)&&d>0)?((c/d)*100).toFixed(1)+"%":null;
+                  return<div key={item.key} style={{gridColumn:"1 / -1",border:`1px solid ${C.borderBrt}`,borderRadius:4,padding:"10px 12px",background:C.panelAlt}}>
+                    <div style={{fontSize:10,color:C.accent,letterSpacing:2,marginBottom:8}}>設備案 / 門號案 / 設備案佔比</div>
+                    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8}}>
+                      <FG label="門號案（分母）"><input type="number" min={0} placeholder="0" value={form.device_count}
+                        onChange={e=>{setForm(f=>({...f,device_count:e.target.value}));setSaved(false);}} style={SI}/></FG>
+                      <FG label="設備案"><input type="number" min={0} placeholder="0" value={form.device_case}
+                        onChange={e=>{setForm(f=>({...f,device_case:e.target.value}));setSaved(false);}} style={SI}/></FG>
+                      <FG label="設備案佔比（自動）">
+                        <div style={{...SI,background:"#0A0D14",color:ratio?C.accent:C.textDim,fontWeight:700,display:"flex",alignItems:"center"}}>{ratio||"——"}</div>
+                      </FG>
+                    </div>
+                  </div>;
+                }
+                if(item.type==="insur"){
+                  const d=parseFloat(form.device_count),ins=parseFloat(form.insurance_count);
+                  const rate=(!isNaN(d)&&!isNaN(ins)&&d>0)?((ins/d)*100).toFixed(1):null;
+                  const met=rate!==null?parseFloat(rate)>=50:null;
+                  return<div key={item.key} style={{gridColumn:"1 / -1",border:`1px solid ${met===null?C.borderBrt:met?C.rise:C.fall}`,borderRadius:4,padding:"10px 12px",background:C.panelAlt}}>
+                    <div style={{display:"flex",justifyContent:"space-between",marginBottom:8}}>
+                      <span style={{fontSize:10,color:C.accent,letterSpacing:2}}>保險搭售率</span>
+                      <span style={{fontSize:10,color:C.textSec}}>TARGET ≥50%</span>
+                    </div>
+                    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8,alignItems:"end"}}>
+                      <FG label="搭售數"><input type="number" min={0} placeholder="0" value={form.insurance_count}
+                        onChange={e=>{setForm(f=>({...f,insurance_count:e.target.value}));setSaved(false);}} style={SI}/></FG>
+                      <FG label="設備數（自動帶入）">
+                        <div style={{...SI,background:"#0A0D14",color:C.accent,fontWeight:700,display:"flex",alignItems:"center"}}>{form.device_count||"——"}</div>
+                      </FG>
+                      <FG label="搭售%">
+                        <div style={{display:"flex",alignItems:"center",gap:6}}>
+                          <div style={{...SI,flex:1,background:"#0A0D14",color:met===null?C.textDim:met?C.rise:C.fall,fontWeight:900,textAlign:"center"}}>
+                            {rate!==null?`${rate}%`:"——"}
+                          </div>
+                          <Badge met={met} size={18}/>
+                        </div>
+                      </FG>
+                    </div>
+                  </div>;
+                }
+                const val=form[item.key];
+                const met=item.hasTarget?meetsTarget(item.key,val,store):null;
+                return<div key={item.key}>
+                  <div style={{display:"flex",justifyContent:"space-between",marginBottom:4}}>
+                    <span style={{fontSize:10,color:C.textSec,letterSpacing:1}}>{item.label}{item.unit?` (${item.unit})`:""}</span>
+                    {tLabel&&<span style={{fontSize:9,color:C.textDim}}>{tLabel}</span>}
+                  </div>
+                  <div style={{display:"flex",alignItems:"center",gap:6}}>
+                    <input type="number" min={0} placeholder="0" value={val}
+                      onChange={e=>{setForm(f=>({...f,[item.key]:e.target.value}));setSaved(false);}}
+                      style={{...SI,flex:1,borderColor:met===null?C.border:met?C.riseDim:C.fallDim,color:met===null?C.textPri:met?C.rise:C.fall}}/>
+                    {item.hasTarget&&<Badge met={met} size={16}/>}
+                  </div>
+                </div>;
+              })}
+            </div>
+            <div style={{display:"flex",gap:10,marginTop:16}}>
+              <button onClick={handleSave} disabled={saving} style={{
+                flex:1,padding:"11px 0",background:saved?C.riseDim:"transparent",
+                border:`1px solid ${saved?C.rise:C.accent}`,color:saved?C.rise:C.accent,
+                borderRadius:4,fontWeight:900,fontSize:13,cursor:saving?"not-allowed":"pointer",letterSpacing:2,opacity:saving?0.7:1
+              }}>{saving?<><Spinner/>SAVING...</>:saved?"▲ SAVED 已儲存":"SUBMIT 儲存資料"}</button>
+              <button onClick={()=>{setForm(emptyForm());setSaved(false);}} style={{
+                padding:"11px 16px",background:"transparent",border:`1px solid ${C.border}`,
+                color:C.textSec,borderRadius:4,fontSize:12,cursor:"pointer"}}>CLR</button>
+            </div>
+          </Panel>}
+        </>}
+
+        {view==="summary"&&<>
+          <Panel>
+            <div style={{display:"flex",alignItems:"center",gap:16,flexWrap:"wrap"}}>
+              <FG label="BOARD DATE 彙整日期" style={{flex:"0 0 160px"}}>
+                <input type="date" value={sumDate} onChange={e=>setSumDate(e.target.value)} style={SI}/>
+              </FG>
+              <button onClick={()=>loadDate(sumDate)} style={{background:"transparent",border:`1px solid ${C.border}`,
+                color:C.textSec,borderRadius:3,fontSize:9,padding:"5px 10px",cursor:"pointer",letterSpacing:1}}>
+                {netStatus==="loading"?<Spinner/>:"↻"} REFRESH
+              </button>
+              <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+                {filled.length>0&&<div style={{fontSize:11,border:`1px solid ${C.riseDim}`,borderRadius:4,padding:"4px 10px",color:C.rise}}>▲ 已回填 {filled.length} 家</div>}
+                {missing.length>0&&<div style={{fontSize:11,border:`1px solid ${C.fallDim}`,borderRadius:4,padding:"4px 10px",color:C.fall}}>
+                  ▼ 未回填：{missing.map(s=>`${s}(${isMedium(s)?"中":"小"})`).join(" · ")}
+                </div>}
+              </div>
+            </div>
+          </Panel>
+
+          {filled.length>0&&<Panel noPad>
+            <div style={{padding:"8px 14px",borderBottom:`1px solid ${C.border}`,fontSize:10,color:C.textSec,letterSpacing:2}}>MARKET BOARD — {sumDate}</div>
+            <div style={{overflowX:"auto"}}>
+              <table style={{width:"100%",borderCollapse:"collapse",fontSize:11}}>
+                <thead>
+                  <tr>
+                    <th style={STH}>ITEM 項目</th>
+                    {filled.map(s=><th key={s} style={STH}>
+                      <div style={{color:isMedium(s)?C.accent:C.fall}}>{s}</div>
+                      <div style={{fontSize:9,color:C.textSec,fontWeight:400}}>{isMedium(s)?"中型":"小型"}</div>
+                    </th>)}
+                    <th style={{...STH,color:C.accent,borderLeft:`1px solid ${C.accent}`}}>TOTAL</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {ITEMS.map((item,idx)=>{
+                    const rowBg=idx%2===0?C.panel:C.panelAlt;
+                    if(item.type==="device"){
+                      const tD=sumItem("device_count"),tC=sumItem("device_case");
+                      const tR=(tD&&tC&&tD>0)?((tC/tD)*100).toFixed(1)+"%":"——";
+                      return<tr key={item.key} style={{background:rowBg}}>
+                        <td style={STD}><div style={{fontWeight:700}}>設備案/門號案</div><div style={{color:C.textSec,fontSize:9}}>設備案佔比</div></td>
+                        {filled.map(s=>{
+                          const d=sumEnt[s]?.device_count,c=sumEnt[s]?.device_case;
+                          const r=(d&&c&&parseFloat(d)>0)?((parseFloat(c)/parseFloat(d))*100).toFixed(1)+"%":null;
+                          return<td key={s} style={{...STD,textAlign:"center"}}>
+                            {d||c?<><div style={{color:C.neutral}}>門:{d||"—"} 設:{c||"—"}</div><div style={{color:C.accent,fontWeight:700}}>{r||"——"}</div></>:<span style={{color:C.textDim}}>——</span>}
+                          </td>;
+                        })}
+                        <td style={{...STD,textAlign:"center",borderLeft:`1px solid ${C.accentDim}`}}>
+                          <div style={{color:C.neutral}}>門:{tD??'—'} 設:{tC??'—'}</div>
+                          <div style={{color:C.accent,fontWeight:700}}>{tR}</div>
+                        </td>
+                      </tr>;
+                    }
+                    if(item.type==="insur"){
+                      const tI=sumItem("insurance_count"),tD=sumItem("device_count");
+                      const tRate=(tI!==null&&tD!==null&&tD>0)?((tI/tD)*100).toFixed(1):null;
+                      const tMet=tRate!==null?parseFloat(tRate)>=50:null;
+                      return<tr key={item.key} style={{background:rowBg}}>
+                        <td style={STD}><div style={{fontWeight:700}}>保險搭售率</div><div style={{color:C.textSec,fontSize:9}}>TARGET ≥50%</div></td>
+                        {filled.map(s=>{
+                          const ins=sumEnt[s]?.insurance_count,dev=sumEnt[s]?.device_count;
+                          const r=(ins!==undefined&&dev!==undefined&&parseFloat(dev)>0)?((parseFloat(ins||0)/parseFloat(dev))*100).toFixed(1):null;
+                          const met=r!==null?parseFloat(r)>=50:null;
+                          return<td key={s} style={{...STD,textAlign:"center",background:met===null?rowBg:met?C.riseBg:C.fallBg}}>
+                            {r!==null?<><div style={{color:C.neutral,fontSize:10}}>搭:{ins} 設:{dev}</div>
+                              <div style={{fontWeight:900,color:met?C.rise:C.fall}}>{r}% <Badge met={met} size={12}/></div></>:<span style={{color:C.textDim}}>——</span>}
+                          </td>;
+                        })}
+                        <td style={{...STD,textAlign:"center",background:tMet===null?rowBg:tMet?C.riseBg:C.fallBg,borderLeft:`1px solid ${C.accentDim}`}}>
+                          {tRate!==null?<><div style={{color:C.neutral,fontSize:10}}>搭:{tI} 設:{tD}</div>
+                            <div style={{fontWeight:900,color:tMet?C.rise:C.fall}}>{tRate}% <Badge met={tMet} size={12}/></div></>:"——"}
+                        </td>
+                      </tr>;
+                    }
+                    const totalVal=sumItem(item.key);
+                    return<tr key={item.key} style={{background:rowBg}}>
+                      <td style={STD}>
+                        <div style={{fontWeight:700}}>{item.label}</div>
+                        {item.hasTarget&&<div style={{color:C.textSec,fontSize:9}}>中{TARGETS[item.key]?.medium} / 小{TARGETS[item.key]?.small} {item.unit}</div>}
+                      </td>
+                      {filled.map(s=>{
+                        const val=sumEnt[s]?.[item.key];
+                        const met=item.hasTarget?meetsTarget(item.key,val,s):null;
+                        return<td key={s} style={{...STD,textAlign:"center",background:met===null?rowBg:met?C.riseBg:C.fallBg}}>
+                          {val!==""&&val!==undefined
+                            ?<span style={{fontWeight:700,color:met===null?C.textPri:met?C.rise:C.fall}}>{val}{item.unit} {item.hasTarget&&<Badge met={met} size={11}/>}</span>
+                            :<span style={{color:C.textDim}}>——</span>}
+                        </td>;
+                      })}
+                      <td style={{...STD,textAlign:"center",fontWeight:700,color:C.accent,borderLeft:`1px solid ${C.accentDim}`}}>
+                        {totalVal!==null?`${totalVal}${item.unit}`:"——"}
+                      </td>
+                    </tr>;
+                  })}
+                </tbody>
+              </table>
+            </div>
+            <div style={{padding:"6px 12px",fontSize:10,color:C.textDim,borderTop:`1px solid ${C.border}`}}>
+              ▲ 達標（紅）　▼ 未達標（綠）　目標：中型 / 小型
+            </div>
+          </Panel>}
+          {filled.length===0&&<div style={{textAlign:"center",padding:"60px 0",color:C.textDim,fontSize:13,letterSpacing:2}}>NO DATA — {sumDate}</div>}
+        </>}
+      </div>
+    </div>
+  );
+}
+
+const root=ReactDOM.createRoot(document.getElementById("root"));
+root.render(<App/>);
+</script>
+</body>
+</html>
