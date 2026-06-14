@@ -10,8 +10,7 @@
 <style>
   *{box-sizing:border-box;margin:0;padding:0;}
   body{background:#0D0F14;color:#E2E8F0;font-family:'Courier New',monospace;}
-  input[type=number]::-webkit-inner-spin-button,
-  input[type=number]::-webkit-outer-spin-button{opacity:1;}
+  input[type=number]::-webkit-inner-spin-button,input[type=number]::-webkit-outer-spin-button{opacity:1;}
   input,select{color:#E2E8F0 !important;background:#0D1117 !important;}
   input::placeholder{color:#374151;}
   select option{background:#131720;color:#E2E8F0;}
@@ -26,9 +25,6 @@
 <div id="root"></div>
 <script type="text/babel">
 
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-//  Cloudflare Workers 版本 — 網址已填入
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 const API_URL = "https://north12c-report.n12c.workers.dev";
 
 const C={
@@ -39,6 +35,7 @@ const C={
   rise:"#F04D4D",riseDim:"#7F1D1D",riseBg:"#1A0A0A",
   fall:"#00C078",fallDim:"#064E3B",fallBg:"#041A10",
   neutral:"#94A3B8",inputBg:"#0D1117",
+  warn:"#F59E0B",warnBg:"#1A1200",warnDim:"#78350F",
 };
 
 const STORES={
@@ -49,11 +46,13 @@ const ALL_STORES=[...STORES.medium,...STORES.small];
 const isMedium=s=>STORES.medium.includes(s);
 
 const TARGETS={
-  AQ999:{medium:2,small:1},AQ1399:{medium:2,small:1},
-  RT999:{medium:6,small:5},RT1399:{medium:4,small:3},
+  AQ999:{medium:2,small:1},
+  AQ1399:{medium:2,small:1},
+  RT999:{medium:6,small:5},
+  RT1399:{medium:4,small:3},
   tewei:{medium:4,small:3},
-  accessory:{medium:6000,small:4500},film:{medium:2800,small:1800},
-  insurance:{medium:50,small:50},
+  accessory:{medium:6000,small:4500},
+  film:{medium:2800,small:1800},
 };
 const getTarget=(key,store)=>{const t=TARGETS[key];if(!t)return null;return isMedium(store)?t.medium:t.small;};
 const meetsTarget=(key,val,store)=>{
@@ -63,26 +62,34 @@ const meetsTarget=(key,val,store)=>{
 };
 
 const ITEMS=[
-  {key:"AQ999",label:"AQ999",type:"number",unit:"件",hasTarget:true},
-  {key:"AQ1399",label:"AQ1399",type:"number",unit:"件",hasTarget:true},
-  {key:"broadband",label:"寬頻",type:"number",unit:"件",hasTarget:false},
-  {key:"tewei",label:"特維",type:"number",unit:"件",hasTarget:true},
-  {key:"RT999",label:"RT999",type:"number",unit:"件",hasTarget:true},
-  {key:"RT1399",label:"RT1399",type:"number",unit:"件",hasTarget:true},
-  {key:"device_case",label:"設備案/門號案",type:"device",unit:"",hasTarget:false},
-  {key:"insurance",label:"保險搭售率",type:"insur",unit:"%",hasTarget:true},
-  {key:"accessory",label:"配件",type:"number",unit:"元",hasTarget:true},
-  {key:"film",label:"包膜",type:"number",unit:"元",hasTarget:true},
+  {key:"AQ999",   label:"AQ999",        type:"number",unit:"件",hasTarget:true},
+  {key:"AQ1399",  label:"AQ1399",       type:"number",unit:"件",hasTarget:true},
+  {key:"broadband",label:"寬頻",         type:"number",unit:"件",hasTarget:false},
+  {key:"tewei",   label:"特維",          type:"number",unit:"件",hasTarget:true},
+  {key:"RT999",   label:"RT999",        type:"number",unit:"件",hasTarget:true},
+  {key:"RT1399",  label:"RT1399",       type:"number",unit:"件",hasTarget:true},
+  {key:"__device",label:"設備案區塊",    type:"device", unit:"",hasTarget:false},
+  {key:"__insur", label:"保險搭售率",    type:"insur",  unit:"",hasTarget:false},
+  {key:"accessory",label:"配件",         type:"number",unit:"元",hasTarget:true},
+  {key:"film",    label:"包膜",          type:"number",unit:"元",hasTarget:true},
   {key:"video_kkbox",label:"Video+KKBOX",type:"number",unit:"件",hasTarget:false},
   {key:"apple_service",label:"APPLE服務",type:"number",unit:"件",hasTarget:false},
-  {key:"hbo",label:"HBO",type:"number",unit:"件",hasTarget:false},
-  {key:"nf_p",label:"NF/P",type:"number",unit:"件",hasTarget:false},
+  {key:"hbo",     label:"HBO",          type:"number",unit:"件",hasTarget:false},
+  {key:"nf_p",    label:"NF/P",         type:"number",unit:"件",hasTarget:false},
 ];
 
 const todayStr=()=>new Date().toISOString().slice(0,10);
-const emptyForm=()=>({...Object.fromEntries(ITEMS.map(i=>[i.key,""])),device_count:"",insurance_count:""});
+const emptyForm=()=>({
+  AQ999:"",AQ1399:"",broadband:"",tewei:"",RT999:"",RT1399:"",
+  device_num:"",    // 門號案
+  device_case:"",   // 設備案
+  // 總數自動 = device_num + device_case
+  insurance_count:"",  // 保險搭售數
+  phone_sales:"",      // 手機設備案銷售數
+  // 搭售率自動 = insurance_count / phone_sales
+  accessory:"",film:"",video_kkbox:"",apple_service:"",hbo:"",nf_p:"",
+});
 
-// ── API helpers (Cloudflare Workers) ──────────────────────
 async function apiGet(date){
   const r=await fetch(`${API_URL}/data?date=${date}`);
   if(!r.ok)throw new Error("GET failed");
@@ -90,29 +97,31 @@ async function apiGet(date){
 }
 async function apiPost(date,store,form){
   const r=await fetch(`${API_URL}/data`,{
-    method:"POST",
-    headers:{"Content-Type":"application/json"},
+    method:"POST",headers:{"Content-Type":"application/json"},
     body:JSON.stringify({date,store,form}),
   });
   if(!r.ok)throw new Error("POST failed");
   return r.json();
 }
 
-// ── Components ────────────────────────────────────────────
+// ── Badge (台股慣例：達標紅▲ 未達標綠▼) ─────────────────────
 function Badge({met,size=15}){
   if(met===null)return<span style={{color:C.textDim,fontSize:size}}>—</span>;
   return met
     ?<span style={{fontSize:size,color:C.rise,fontWeight:900}}>▲</span>
     :<span style={{fontSize:size,color:C.fall,fontWeight:900}}>▼</span>;
 }
+// 低水位警告 badge（低於閾值紅色，高於綠色）
+function ThreshBadge({pct,threshold=50,size=14}){
+  if(pct===null)return<span style={{color:C.textDim,fontSize:size}}>—</span>;
+  const ok=pct>=threshold;
+  return<span style={{fontSize:size,fontWeight:900,color:ok?C.fall:C.rise}}>
+    {ok?"✓":"⚠"}
+  </span>;
+}
+
 function StockTab({active,onClick,children}){
-  return<button onClick={onClick} style={{
-    padding:"5px 14px",borderRadius:2,
-    background:active?C.accent:"transparent",color:active?"#000":C.textSec,
-    border:`1px solid ${active?C.accent:C.border}`,
-    fontWeight:active?900:400,fontSize:11,cursor:"pointer",letterSpacing:1,
-    fontFamily:"'Courier New',monospace"
-  }}>{children}</button>;
+  return<button onClick={onClick} style={{padding:"5px 14px",borderRadius:2,background:active?C.accent:"transparent",color:active?"#000":C.textSec,border:`1px solid ${active?C.accent:C.border}`,fontWeight:active?900:400,fontSize:11,cursor:"pointer",letterSpacing:1,fontFamily:"'Courier New',monospace"}}>{children}</button>;
 }
 function Panel({children,noPad}){
   return<div style={{background:C.panel,border:`1px solid ${C.border}`,borderRadius:4,marginBottom:12,padding:noPad?0:"14px 16px"}}>{children}</div>;
@@ -123,25 +132,40 @@ function FG({label,children,style}){
     {children}
   </div>;
 }
-function Spinner(){
-  return<span style={{display:"inline-block",width:12,height:12,border:`2px solid ${C.accent}`,
-    borderTopColor:"transparent",borderRadius:"50%",animation:"spin 0.7s linear infinite",verticalAlign:"middle",marginRight:6}}/>;
-}
+function Spinner(){return<span style={{display:"inline-block",width:12,height:12,border:`2px solid ${C.accent}`,borderTopColor:"transparent",borderRadius:"50%",animation:"spin 0.7s linear infinite",verticalAlign:"middle",marginRight:6}}/>;}
 function NetBadge({status}){
   const map={ok:[C.rise,"LIVE"],loading:[C.accent,"SYNC..."],error:[C.fall,"OFFLINE"]};
   const[col,txt]=map[status]||map.ok;
-  return<span style={{fontSize:9,color:col,letterSpacing:1}}>
-    {status==="loading"&&<Spinner/>}{txt}
-  </span>;
+  return<span style={{fontSize:9,color:col,letterSpacing:1}}>{status==="loading"&&<Spinner/>}{txt}</span>;
 }
 
-const SI={width:"100%",padding:"7px 9px",background:C.inputBg,border:`1px solid ${C.borderBrt}`,
-  borderRadius:3,fontSize:12,color:C.textPri,boxSizing:"border-box",outline:"none",fontFamily:"'Courier New',monospace"};
-const STH={padding:"8px 10px",background:C.headerBg,color:C.textSec,fontWeight:700,textAlign:"center",
-  border:`1px solid ${C.border}`,fontSize:10,letterSpacing:1,whiteSpace:"nowrap"};
+const SI={width:"100%",padding:"7px 9px",background:C.inputBg,border:`1px solid ${C.borderBrt}`,borderRadius:3,fontSize:12,color:C.textPri,boxSizing:"border-box",outline:"none",fontFamily:"'Courier New',monospace"};
+const STH={padding:"8px 10px",background:C.headerBg,color:C.textSec,fontWeight:700,textAlign:"center",border:`1px solid ${C.border}`,fontSize:10,letterSpacing:1,whiteSpace:"nowrap"};
 const STD={padding:"7px 10px",border:`1px solid ${C.border}`,fontSize:11,color:C.textPri,verticalAlign:"middle"};
 
-// ── Main App ──────────────────────────────────────────────
+// ── 自動計算 helpers ─────────────────────────────────────────
+function calcDevice(form){
+  const num=parseFloat(form.device_num)||0;
+  const cas=parseFloat(form.device_case)||0;
+  const total=num+cas;
+  const pct=total>0?((cas/total)*100):null;
+  return{num,cas,total:total||null,pct};
+}
+function calcInsur(form){
+  const ins=parseFloat(form.insurance_count)||0;
+  const phone=parseFloat(form.phone_sales)||0;
+  const pct=phone>0?((ins/phone)*100):null;
+  return{ins,phone,pct};
+}
+
+// ── 警告色框 ─────────────────────────────────────────────────
+function alertBox(pct,threshold=50){
+  if(pct===null)return{};
+  return pct>=threshold
+    ?{borderColor:C.fall,background:C.fallBg}
+    :{borderColor:C.rise,background:C.riseBg};
+}
+
 function App(){
   const{useState,useEffect,useCallback}=React;
   const[view,setView]=useState("input");
@@ -157,45 +181,28 @@ function App(){
   const[lastSync,setLastSync]=useState("");
 
   useEffect(()=>{
-    const tick=()=>setNow(new Date().toLocaleTimeString("zh-TW",{hour:"2-digit",minute:"2-digit",second:"2-digit",hour12:false}));
-    tick();const id=setInterval(tick,1000);return()=>clearInterval(id);
+    const t=()=>setNow(new Date().toLocaleTimeString("zh-TW",{hour:"2-digit",minute:"2-digit",second:"2-digit",hour12:false}));
+    t();const id=setInterval(t,1000);return()=>clearInterval(id);
   },[]);
 
   const loadDate=useCallback(async(d)=>{
     setNetStatus("loading");
-    try{
-      const data=await apiGet(d);
-      setAllData(prev=>({...prev,[d]:data}));
-      setLastSync(new Date().toLocaleTimeString("zh-TW",{hour:"2-digit",minute:"2-digit",hour12:false}));
-      setNetStatus("ok");
-    }catch{setNetStatus("error");}
+    try{const data=await apiGet(d);setAllData(p=>({...p,[d]:data}));setLastSync(new Date().toLocaleTimeString("zh-TW",{hour:"2-digit",minute:"2-digit",hour12:false}));setNetStatus("ok");}
+    catch{setNetStatus("error");}
   },[]);
 
   useEffect(()=>{loadDate(date);},[date]);
   useEffect(()=>{if(sumDate!==date)loadDate(sumDate);},[sumDate]);
-  // Auto-refresh every 60s
+  useEffect(()=>{const id=setInterval(()=>{loadDate(date);if(sumDate!==date)loadDate(sumDate);},60000);return()=>clearInterval(id);},[date,sumDate]);
   useEffect(()=>{
-    const id=setInterval(()=>{loadDate(date);if(sumDate!==date)loadDate(sumDate);},60000);
-    return()=>clearInterval(id);
-  },[date,sumDate]);
-
-  useEffect(()=>{
-    if(store&&date){
-      const ex=allData?.[date]?.[store];
-      setForm(ex?{...emptyForm(),...ex}:emptyForm());
-      setSaved(false);
-    }
+    if(store&&date){const ex=allData?.[date]?.[store];setForm(ex?{...emptyForm(),...ex}:emptyForm());setSaved(false);}
   },[store,date,allData]);
 
   const handleSave=async()=>{
     if(!store||saving)return;
     setSaving(true);setNetStatus("loading");
-    try{
-      await apiPost(date,store,form);
-      setAllData(prev=>({...prev,[date]:{...(prev[date]||{}),[store]:{...form}}}));
-      setSaved(true);setNetStatus("ok");
-      setLastSync(new Date().toLocaleTimeString("zh-TW",{hour:"2-digit",minute:"2-digit",hour12:false}));
-    }catch{setNetStatus("error");alert("儲存失敗，請確認網路連線。");}
+    try{await apiPost(date,store,form);setAllData(p=>({...p,[date]:{...(p[date]||{}),[store]:{...form}}}));setSaved(true);setNetStatus("ok");setLastSync(new Date().toLocaleTimeString("zh-TW",{hour:"2-digit",minute:"2-digit",hour12:false}));}
+    catch{setNetStatus("error");alert("儲存失敗，請確認網路連線。");}
     finally{setSaving(false);}
   };
 
@@ -204,8 +211,12 @@ function App(){
   const missing=ALL_STORES.filter(s=>!sumEnt[s]);
   const sumItem=key=>{let t=0,h=false;ALL_STORES.forEach(s=>{const v=sumEnt[s]?.[key];if(v!==""&&v!==undefined){const n=parseFloat(v);if(!isNaN(n)){t+=n;h=true;}}});return h?t:null;};
   const filledCount=Object.keys(allData?.[date]||{}).length;
-  const targetLabel=(key,st)=>{const t=getTarget(key,st);if(t===null)return"";if(key==="insurance")return`目標 ≥${t}%`;const item=ITEMS.find(i=>i.key===key);return`目標 ${t}${item?.unit||""}`;};
-  const tickerText=ALL_STORES.map(s=>{const done=!!allData?.[date]?.[s];return`${done?"▲":"▼"} ${s}（${isMedium(s)?"中":"小"}）`;}).join("  ·  ")+"  ·  回填進度 "+filledCount+"/9 家  ·  ";
+  const targetLabel=(key,st)=>{const t=getTarget(key,st);if(t===null)return"";const item=ITEMS.find(i=>i.key===key);return`目標 ${t}${item?.unit||""}`;};
+  const tickerText=ALL_STORES.map(s=>`${!!allData?.[date]?.[s]?"▲":"▼"} ${s}（${isMedium(s)?"中":"小"}）`).join("  ·  ")+"  ·  回填進度 "+filledCount+"/9 家  ·  ";
+
+  // 即時計算（回填頁面）
+  const dev=calcDevice(form);
+  const ins=calcInsur(form);
 
   return(
     <div style={{fontFamily:"'Courier New',monospace",background:C.bg,minHeight:"100vh",paddingBottom:48,color:C.textPri}}>
@@ -222,7 +233,7 @@ function App(){
             <div style={{marginBottom:2}}><NetBadge status={netStatus}/></div>
             <div style={{color:C.accent,fontWeight:700,fontSize:12,letterSpacing:1}}>{now}</div>
           </div>
-          {lastSync&&<div style={{fontSize:9,color:C.textDim}}>上次同步 {lastSync}</div>}
+          {lastSync&&<div style={{fontSize:9,color:C.textDim}}>同步 {lastSync}</div>}
         </div>
         <div style={{display:"flex",gap:6}}>
           <StockTab active={view==="input"} onClick={()=>setView("input")}>回填 INPUT</StockTab>
@@ -232,19 +243,16 @@ function App(){
 
       {/* TICKER */}
       <div style={{background:"#0A0C10",borderBottom:`1px solid ${C.border}`,padding:"4px 0",overflow:"hidden",whiteSpace:"nowrap"}}>
-        <span style={{display:"inline-block",animation:"ticker 28s linear infinite",fontSize:11,color:C.textSec}}>
-          {tickerText+tickerText}
-        </span>
+        <span style={{display:"inline-block",animation:"ticker 28s linear infinite",fontSize:11,color:C.textSec}}>{tickerText+tickerText}</span>
       </div>
 
       <div style={{maxWidth:760,margin:"0 auto",padding:"16px 14px 0"}}>
 
+        {/* ══ INPUT ══ */}
         {view==="input"&&<>
           <Panel>
             <div style={{display:"flex",alignItems:"center",gap:12,flexWrap:"wrap"}}>
-              <FG label="DATE 日期" style={{flex:"0 0 150px"}}>
-                <input type="date" value={date} onChange={e=>{setDate(e.target.value);setSaved(false);}} style={SI}/>
-              </FG>
+              <FG label="DATE 日期" style={{flex:"0 0 150px"}}><input type="date" value={date} onChange={e=>{setDate(e.target.value);setSaved(false);}} style={SI}/></FG>
               <FG label="STORE 店別" style={{flex:1,minWidth:160}}>
                 <select value={store} onChange={e=>setStore(e.target.value)} style={SI}>
                   <option value="">── 請選擇 ──</option>
@@ -255,97 +263,37 @@ function App(){
               {store&&<div style={{padding:"6px 12px",border:`1px solid ${isMedium(store)?C.accent:C.fall}`,borderRadius:4,fontSize:12}}>
                 <span style={{color:isMedium(store)?C.accent:C.fall,fontWeight:700}}>{isMedium(store)?"● 中型":"● 小型"}</span>
                 <span style={{color:C.textPri,marginLeft:6}}>{store}</span>
-                <span style={{color:allData?.[date]?.[store]?C.rise:C.textSec,marginLeft:8,fontSize:10}}>
-                  {allData?.[date]?.[store]?"▲ 已回填":"○ 待填"}
-                </span>
+                <span style={{color:allData?.[date]?.[store]?C.rise:C.textSec,marginLeft:8,fontSize:10}}>{allData?.[date]?.[store]?"▲ 已回填":"○ 待填"}</span>
               </div>}
             </div>
           </Panel>
 
+          {/* Progress */}
           <Panel noPad>
             <div style={{padding:"8px 12px",borderBottom:`1px solid ${C.border}`,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
               <span style={{fontSize:10,color:C.textSec,letterSpacing:2}}>DAILY PROGRESS — {date}</span>
               <div style={{display:"flex",alignItems:"center",gap:10}}>
-                <button onClick={()=>loadDate(date)} style={{background:"transparent",border:`1px solid ${C.border}`,color:C.textSec,
-                  borderRadius:3,fontSize:9,padding:"2px 8px",cursor:"pointer",letterSpacing:1}}>
-                  {netStatus==="loading"?<Spinner/>:"↻"} REFRESH
-                </button>
-                <span style={{fontSize:11}}>
-                  <span style={{display:"inline-block",width:7,height:7,borderRadius:"50%",
-                    background:filledCount===9?C.rise:filledCount>4?C.accent:C.fall,marginRight:5,verticalAlign:"middle"}}/>
-                  <span style={{color:filledCount===9?C.rise:C.accent}}>{filledCount}</span>
-                  <span style={{color:C.textSec}}>/9</span>
-                </span>
+                <button onClick={()=>loadDate(date)} style={{background:"transparent",border:`1px solid ${C.border}`,color:C.textSec,borderRadius:3,fontSize:9,padding:"2px 8px",cursor:"pointer"}}>{netStatus==="loading"?<Spinner/>:"↻"} REFRESH</button>
+                <span style={{fontSize:11}}><span style={{display:"inline-block",width:7,height:7,borderRadius:"50%",background:filledCount===9?C.rise:filledCount>4?C.accent:C.fall,marginRight:5,verticalAlign:"middle"}}/><span style={{color:filledCount===9?C.rise:C.accent}}>{filledCount}</span><span style={{color:C.textSec}}>/9</span></span>
               </div>
             </div>
             <div style={{display:"flex",flexWrap:"wrap"}}>
-              {ALL_STORES.map(s=>{
-                const done=!!allData?.[date]?.[s];const active=s===store;
-                return<button key={s} onClick={()=>{setStore(s);window.scrollTo({top:0,behavior:"smooth"});}}
-                  style={{flex:"1 1 33%",padding:"7px 10px",border:"none",
-                    borderRight:`1px solid ${C.border}`,borderBottom:`1px solid ${C.border}`,
-                    borderLeft:active?`2px solid ${C.accent}`:"2px solid transparent",
-                    background:active?C.panelAlt:"transparent",cursor:"pointer",textAlign:"left"}}>
-                  <span style={{fontSize:10,color:done?C.rise:C.fall,marginRight:5}}>{done?"▲":"▼"}</span>
-                  <span style={{fontSize:11,color:active?C.accent:C.textPri}}>{s}</span>
-                  <span style={{fontSize:9,color:C.textSec,marginLeft:4}}>{isMedium(s)?"中":"小"}</span>
-                </button>;
-              })}
+              {ALL_STORES.map(s=>{const done=!!allData?.[date]?.[s];const active=s===store;return<button key={s} onClick={()=>{setStore(s);window.scrollTo({top:0,behavior:"smooth"});}} style={{flex:"1 1 33%",padding:"7px 10px",border:"none",borderRight:`1px solid ${C.border}`,borderBottom:`1px solid ${C.border}`,borderLeft:active?`2px solid ${C.accent}`:"2px solid transparent",background:active?C.panelAlt:"transparent",cursor:"pointer",textAlign:"left"}}><span style={{fontSize:10,color:done?C.rise:C.fall,marginRight:5}}>{done?"▲":"▼"}</span><span style={{fontSize:11,color:active?C.accent:C.textPri}}>{s}</span><span style={{fontSize:9,color:C.textSec,marginLeft:4}}>{isMedium(s)?"中":"小"}</span></button>;})}
             </div>
           </Panel>
 
           {store&&<Panel>
-            <div style={{fontSize:10,color:C.textSec,letterSpacing:2,marginBottom:14}}>INPUT ITEMS — {store} · {isMedium(store)?"中型店":"小型店"}</div>
+            <div style={{fontSize:10,color:C.textSec,letterSpacing:2,marginBottom:14}}>INPUT — {store} · {isMedium(store)?"中型":"小型"}</div>
             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"10px 14px"}}>
-              {ITEMS.map(item=>{
-                const tLabel=targetLabel(item.key,store);
-                if(item.type==="device"){
-                  const d=parseFloat(form.device_count),c=parseFloat(form.device_case);
-                  const ratio=(!isNaN(d)&&!isNaN(c)&&d>0)?((c/d)*100).toFixed(1)+"%":null;
-                  return<div key={item.key} style={{gridColumn:"1 / -1",border:`1px solid ${C.borderBrt}`,borderRadius:4,padding:"10px 12px",background:C.panelAlt}}>
-                    <div style={{fontSize:10,color:C.accent,letterSpacing:2,marginBottom:8}}>設備案 / 門號案 / 設備案佔比</div>
-                    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8}}>
-                      <FG label="門號案（分母）"><input type="number" min={0} placeholder="0" value={form.device_count}
-                        onChange={e=>{setForm(f=>({...f,device_count:e.target.value}));setSaved(false);}} style={SI}/></FG>
-                      <FG label="設備案"><input type="number" min={0} placeholder="0" value={form.device_case}
-                        onChange={e=>{setForm(f=>({...f,device_case:e.target.value}));setSaved(false);}} style={SI}/></FG>
-                      <FG label="設備案佔比（自動）">
-                        <div style={{...SI,background:"#0A0D14",color:ratio?C.accent:C.textDim,fontWeight:700,display:"flex",alignItems:"center"}}>{ratio||"——"}</div>
-                      </FG>
-                    </div>
-                  </div>;
-                }
-                if(item.type==="insur"){
-                  const d=parseFloat(form.device_count),ins=parseFloat(form.insurance_count);
-                  const rate=(!isNaN(d)&&!isNaN(ins)&&d>0)?((ins/d)*100).toFixed(1):null;
-                  const met=rate!==null?parseFloat(rate)>=50:null;
-                  return<div key={item.key} style={{gridColumn:"1 / -1",border:`1px solid ${met===null?C.borderBrt:met?C.rise:C.fall}`,borderRadius:4,padding:"10px 12px",background:C.panelAlt}}>
-                    <div style={{display:"flex",justifyContent:"space-between",marginBottom:8}}>
-                      <span style={{fontSize:10,color:C.accent,letterSpacing:2}}>保險搭售率</span>
-                      <span style={{fontSize:10,color:C.textSec}}>TARGET ≥50%</span>
-                    </div>
-                    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8,alignItems:"end"}}>
-                      <FG label="搭售數"><input type="number" min={0} placeholder="0" value={form.insurance_count}
-                        onChange={e=>{setForm(f=>({...f,insurance_count:e.target.value}));setSaved(false);}} style={SI}/></FG>
-                      <FG label="設備數（自動帶入）">
-                        <div style={{...SI,background:"#0A0D14",color:C.accent,fontWeight:700,display:"flex",alignItems:"center"}}>{form.device_count||"——"}</div>
-                      </FG>
-                      <FG label="搭售%">
-                        <div style={{display:"flex",alignItems:"center",gap:6}}>
-                          <div style={{...SI,flex:1,background:"#0A0D14",color:met===null?C.textDim:met?C.rise:C.fall,fontWeight:900,textAlign:"center"}}>
-                            {rate!==null?`${rate}%`:"——"}
-                          </div>
-                          <Badge met={met} size={18}/>
-                        </div>
-                      </FG>
-                    </div>
-                  </div>;
-                }
+
+              {/* 一般數字項目 */}
+              {ITEMS.filter(i=>i.type==="number").map(item=>{
                 const val=form[item.key];
                 const met=item.hasTarget?meetsTarget(item.key,val,store):null;
+                const tLabel=targetLabel(item.key,store);
                 return<div key={item.key}>
                   <div style={{display:"flex",justifyContent:"space-between",marginBottom:4}}>
-                    <span style={{fontSize:10,color:C.textSec,letterSpacing:1}}>{item.label}{item.unit?` (${item.unit})`:""}</span>
+                    <span style={{fontSize:10,color:C.textSec}}>{item.label}{item.unit?` (${item.unit})`:""}</span>
                     {tLabel&&<span style={{fontSize:9,color:C.textDim}}>{tLabel}</span>}
                   </div>
                   <div style={{display:"flex",alignItems:"center",gap:6}}>
@@ -356,35 +304,94 @@ function App(){
                   </div>
                 </div>;
               })}
+
+              {/* 設備案區塊（全寬） */}
+              <div style={{gridColumn:"1 / -1",border:`1px solid ${C.borderBrt}`,borderRadius:4,padding:"10px 12px",background:C.panelAlt,...alertBox(dev.pct)}}>
+                <div style={{display:"flex",justifyContent:"space-between",marginBottom:8}}>
+                  <span style={{fontSize:10,color:C.accent,letterSpacing:2}}>設備案 / 門號案 / 總數 / 設備案佔比</span>
+                  <span style={{fontSize:9,color:C.textSec}}>低水位 &lt;50% 警告</span>
+                </div>
+                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr",gap:8}}>
+                  <FG label="門號案">
+                    <input type="number" min={0} placeholder="0" value={form.device_num}
+                      onChange={e=>{setForm(f=>({...f,device_num:e.target.value}));setSaved(false);}} style={SI}/>
+                  </FG>
+                  <FG label="設備案">
+                    <input type="number" min={0} placeholder="0" value={form.device_case}
+                      onChange={e=>{setForm(f=>({...f,device_case:e.target.value}));setSaved(false);}} style={SI}/>
+                  </FG>
+                  <FG label="總數（自動）">
+                    <div style={{...SI,background:"#0A0D14",color:dev.total?C.neutral:C.textDim,display:"flex",alignItems:"center"}}>
+                      {dev.total!==null?dev.total:"——"}
+                    </div>
+                  </FG>
+                  <FG label="設備案佔比（自動）">
+                    <div style={{display:"flex",alignItems:"center",gap:6}}>
+                      <div style={{...SI,flex:1,background:"#0A0D14",
+                        color:dev.pct===null?C.textDim:dev.pct>=50?C.fall:C.rise,
+                        fontWeight:700,textAlign:"center"}}>
+                        {dev.pct!==null?`${dev.pct.toFixed(1)}%`:"——"}
+                      </div>
+                      <ThreshBadge pct={dev.pct} size={16}/>
+                    </div>
+                  </FG>
+                </div>
+                {dev.pct!==null&&dev.pct<50&&<div style={{marginTop:8,fontSize:10,color:C.rise,fontWeight:700}}>
+                  ⚠ 設備案佔比偏低（{dev.pct.toFixed(1)}%），低於50%水位
+                </div>}
+              </div>
+
+              {/* 保險搭售率區塊（全寬） */}
+              <div style={{gridColumn:"1 / -1",border:`1px solid ${C.borderBrt}`,borderRadius:4,padding:"10px 12px",background:C.panelAlt,...alertBox(ins.pct)}}>
+                <div style={{display:"flex",justifyContent:"space-between",marginBottom:8}}>
+                  <span style={{fontSize:10,color:C.accent,letterSpacing:2}}>保險搭售率</span>
+                  <span style={{fontSize:9,color:C.textSec}}>低於50%提醒</span>
+                </div>
+                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8,alignItems:"end"}}>
+                  <FG label="保險搭售數">
+                    <input type="number" min={0} placeholder="0" value={form.insurance_count}
+                      onChange={e=>{setForm(f=>({...f,insurance_count:e.target.value}));setSaved(false);}} style={SI}/>
+                  </FG>
+                  <FG label="手機設備案銷售數">
+                    <input type="number" min={0} placeholder="0" value={form.phone_sales}
+                      onChange={e=>{setForm(f=>({...f,phone_sales:e.target.value}));setSaved(false);}} style={SI}/>
+                  </FG>
+                  <FG label="搭售率（自動）">
+                    <div style={{display:"flex",alignItems:"center",gap:6}}>
+                      <div style={{...SI,flex:1,background:"#0A0D14",
+                        color:ins.pct===null?C.textDim:ins.pct>=50?C.fall:C.rise,
+                        fontWeight:900,textAlign:"center"}}>
+                        {ins.pct!==null?`${ins.pct.toFixed(1)}%`:"——"}
+                      </div>
+                      <ThreshBadge pct={ins.pct} size={18}/>
+                    </div>
+                  </FG>
+                </div>
+                {ins.pct!==null&&ins.pct<50&&<div style={{marginTop:8,fontSize:10,color:C.rise,fontWeight:700}}>
+                  ⚠ 保險搭售率偏低（{ins.pct.toFixed(1)}%），請加強推薦保險
+                </div>}
+              </div>
+
             </div>
+
             <div style={{display:"flex",gap:10,marginTop:16}}>
-              <button onClick={handleSave} disabled={saving} style={{
-                flex:1,padding:"11px 0",background:saved?C.riseDim:"transparent",
-                border:`1px solid ${saved?C.rise:C.accent}`,color:saved?C.rise:C.accent,
-                borderRadius:4,fontWeight:900,fontSize:13,cursor:saving?"not-allowed":"pointer",letterSpacing:2,opacity:saving?0.7:1
-              }}>{saving?<><Spinner/>SAVING...</>:saved?"▲ SAVED 已儲存":"SUBMIT 儲存資料"}</button>
-              <button onClick={()=>{setForm(emptyForm());setSaved(false);}} style={{
-                padding:"11px 16px",background:"transparent",border:`1px solid ${C.border}`,
-                color:C.textSec,borderRadius:4,fontSize:12,cursor:"pointer"}}>CLR</button>
+              <button onClick={handleSave} disabled={saving} style={{flex:1,padding:"11px 0",background:saved?C.riseDim:"transparent",border:`1px solid ${saved?C.rise:C.accent}`,color:saved?C.rise:C.accent,borderRadius:4,fontWeight:900,fontSize:13,cursor:saving?"not-allowed":"pointer",letterSpacing:2,opacity:saving?0.7:1}}>
+                {saving?<><Spinner/>SAVING...</>:saved?"▲ SAVED 已儲存":"SUBMIT 儲存資料"}
+              </button>
+              <button onClick={()=>{setForm(emptyForm());setSaved(false);}} style={{padding:"11px 16px",background:"transparent",border:`1px solid ${C.border}`,color:C.textSec,borderRadius:4,fontSize:12,cursor:"pointer"}}>CLR</button>
             </div>
           </Panel>}
         </>}
 
+        {/* ══ SUMMARY ══ */}
         {view==="summary"&&<>
           <Panel>
-            <div style={{display:"flex",alignItems:"center",gap:16,flexWrap:"wrap"}}>
-              <FG label="BOARD DATE 彙整日期" style={{flex:"0 0 160px"}}>
-                <input type="date" value={sumDate} onChange={e=>setSumDate(e.target.value)} style={SI}/>
-              </FG>
-              <button onClick={()=>loadDate(sumDate)} style={{background:"transparent",border:`1px solid ${C.border}`,
-                color:C.textSec,borderRadius:3,fontSize:9,padding:"5px 10px",cursor:"pointer",letterSpacing:1}}>
-                {netStatus==="loading"?<Spinner/>:"↻"} REFRESH
-              </button>
+            <div style={{display:"flex",alignItems:"center",gap:12,flexWrap:"wrap"}}>
+              <FG label="BOARD DATE 彙整日期" style={{flex:"0 0 160px"}}><input type="date" value={sumDate} onChange={e=>setSumDate(e.target.value)} style={SI}/></FG>
+              <button onClick={()=>loadDate(sumDate)} style={{background:"transparent",border:`1px solid ${C.border}`,color:C.textSec,borderRadius:3,fontSize:9,padding:"5px 10px",cursor:"pointer"}}>{netStatus==="loading"?<Spinner/>:"↻"} REFRESH</button>
               <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
                 {filled.length>0&&<div style={{fontSize:11,border:`1px solid ${C.riseDim}`,borderRadius:4,padding:"4px 10px",color:C.rise}}>▲ 已回填 {filled.length} 家</div>}
-                {missing.length>0&&<div style={{fontSize:11,border:`1px solid ${C.fallDim}`,borderRadius:4,padding:"4px 10px",color:C.fall}}>
-                  ▼ 未回填：{missing.map(s=>`${s}(${isMedium(s)?"中":"小"})`).join(" · ")}
-                </div>}
+                {missing.length>0&&<div style={{fontSize:11,border:`1px solid ${C.fallDim}`,borderRadius:4,padding:"4px 10px",color:C.fall}}>▼ 未回填：{missing.map(s=>`${s}(${isMedium(s)?"中":"小"})`).join(" · ")}</div>}
               </div>
             </div>
           </Panel>
@@ -395,7 +402,7 @@ function App(){
               <table style={{width:"100%",borderCollapse:"collapse",fontSize:11}}>
                 <thead>
                   <tr>
-                    <th style={STH}>ITEM 項目</th>
+                    <th style={STH}>項目</th>
                     {filled.map(s=><th key={s} style={STH}>
                       <div style={{color:isMedium(s)?C.accent:C.fall}}>{s}</div>
                       <div style={{fontSize:9,color:C.textSec,fontWeight:400}}>{isMedium(s)?"中型":"小型"}</div>
@@ -404,47 +411,9 @@ function App(){
                   </tr>
                 </thead>
                 <tbody>
-                  {ITEMS.map((item,idx)=>{
+                  {/* 一般數字列 */}
+                  {ITEMS.filter(i=>i.type==="number").map((item,idx)=>{
                     const rowBg=idx%2===0?C.panel:C.panelAlt;
-                    if(item.type==="device"){
-                      const tD=sumItem("device_count"),tC=sumItem("device_case");
-                      const tR=(tD&&tC&&tD>0)?((tC/tD)*100).toFixed(1)+"%":"——";
-                      return<tr key={item.key} style={{background:rowBg}}>
-                        <td style={STD}><div style={{fontWeight:700}}>設備案/門號案</div><div style={{color:C.textSec,fontSize:9}}>設備案佔比</div></td>
-                        {filled.map(s=>{
-                          const d=sumEnt[s]?.device_count,c=sumEnt[s]?.device_case;
-                          const r=(d&&c&&parseFloat(d)>0)?((parseFloat(c)/parseFloat(d))*100).toFixed(1)+"%":null;
-                          return<td key={s} style={{...STD,textAlign:"center"}}>
-                            {d||c?<><div style={{color:C.neutral}}>門:{d||"—"} 設:{c||"—"}</div><div style={{color:C.accent,fontWeight:700}}>{r||"——"}</div></>:<span style={{color:C.textDim}}>——</span>}
-                          </td>;
-                        })}
-                        <td style={{...STD,textAlign:"center",borderLeft:`1px solid ${C.accentDim}`}}>
-                          <div style={{color:C.neutral}}>門:{tD??'—'} 設:{tC??'—'}</div>
-                          <div style={{color:C.accent,fontWeight:700}}>{tR}</div>
-                        </td>
-                      </tr>;
-                    }
-                    if(item.type==="insur"){
-                      const tI=sumItem("insurance_count"),tD=sumItem("device_count");
-                      const tRate=(tI!==null&&tD!==null&&tD>0)?((tI/tD)*100).toFixed(1):null;
-                      const tMet=tRate!==null?parseFloat(tRate)>=50:null;
-                      return<tr key={item.key} style={{background:rowBg}}>
-                        <td style={STD}><div style={{fontWeight:700}}>保險搭售率</div><div style={{color:C.textSec,fontSize:9}}>TARGET ≥50%</div></td>
-                        {filled.map(s=>{
-                          const ins=sumEnt[s]?.insurance_count,dev=sumEnt[s]?.device_count;
-                          const r=(ins!==undefined&&dev!==undefined&&parseFloat(dev)>0)?((parseFloat(ins||0)/parseFloat(dev))*100).toFixed(1):null;
-                          const met=r!==null?parseFloat(r)>=50:null;
-                          return<td key={s} style={{...STD,textAlign:"center",background:met===null?rowBg:met?C.riseBg:C.fallBg}}>
-                            {r!==null?<><div style={{color:C.neutral,fontSize:10}}>搭:{ins} 設:{dev}</div>
-                              <div style={{fontWeight:900,color:met?C.rise:C.fall}}>{r}% <Badge met={met} size={12}/></div></>:<span style={{color:C.textDim}}>——</span>}
-                          </td>;
-                        })}
-                        <td style={{...STD,textAlign:"center",background:tMet===null?rowBg:tMet?C.riseBg:C.fallBg,borderLeft:`1px solid ${C.accentDim}`}}>
-                          {tRate!==null?<><div style={{color:C.neutral,fontSize:10}}>搭:{tI} 設:{tD}</div>
-                            <div style={{fontWeight:900,color:tMet?C.rise:C.fall}}>{tRate}% <Badge met={tMet} size={12}/></div></>:"——"}
-                        </td>
-                      </tr>;
-                    }
                     const totalVal=sumItem(item.key);
                     return<tr key={item.key} style={{background:rowBg}}>
                       <td style={STD}>
@@ -465,13 +434,75 @@ function App(){
                       </td>
                     </tr>;
                   })}
+
+                  {/* 設備案列 */}
+                  {(()=>{
+                    const tNum=sumItem("device_num"),tCas=sumItem("device_case");
+                    const tTotal=(tNum!==null||tCas!==null)?(tNum||0)+(tCas||0):null;
+                    const tPct=tTotal>0?((tCas||0)/tTotal*100):null;
+                    const tMet=tPct!==null?tPct>=50:null;
+                    return<tr style={{background:C.panelAlt}}>
+                      <td style={STD}><div style={{fontWeight:700}}>設備案/門號案</div><div style={{color:C.textSec,fontSize:9}}>總數 / 設備案佔比 ≥50%</div></td>
+                      {filled.map(s=>{
+                        const f=sumEnt[s]||{};
+                        const num=parseFloat(f.device_num)||0,cas=parseFloat(f.device_case)||0;
+                        const total=f.device_num!==undefined||f.device_case!==undefined?num+cas:null;
+                        const pct=total>0?(cas/total*100):null;
+                        const ok=pct!==null?pct>=50:null;
+                        return<td key={s} style={{...STD,textAlign:"center",background:ok===null?C.panelAlt:ok?C.fallBg:C.riseBg}}>
+                          {total!==null?<>
+                            <div style={{color:C.neutral,fontSize:10}}>門:{f.device_num||0} 設:{f.device_case||0} 總:{total}</div>
+                            <div style={{fontWeight:700,color:ok?C.fall:C.rise}}>
+                              {pct!==null?`${pct.toFixed(1)}%`:"——"} <ThreshBadge pct={pct} size={11}/>
+                            </div>
+                          </>:<span style={{color:C.textDim}}>——</span>}
+                        </td>;
+                      })}
+                      <td style={{...STD,textAlign:"center",borderLeft:`1px solid ${C.accentDim}`,background:tMet===null?C.panelAlt:tMet?C.fallBg:C.riseBg}}>
+                        {tTotal!==null?<>
+                          <div style={{color:C.neutral,fontSize:10}}>門:{tNum||0} 設:{tCas||0} 總:{tTotal}</div>
+                          <div style={{fontWeight:700,color:tMet?C.fall:C.rise}}>{tPct!==null?`${tPct.toFixed(1)}%`:"——"} <ThreshBadge pct={tPct} size={11}/></div>
+                        </>:"——"}
+                      </td>
+                    </tr>;
+                  })()}
+
+                  {/* 保險搭售率列 */}
+                  {(()=>{
+                    const tIns=sumItem("insurance_count"),tPhone=sumItem("phone_sales");
+                    const tPct=(tIns!==null&&tPhone!==null&&tPhone>0)?(tIns/tPhone*100):null;
+                    const tMet=tPct!==null?tPct>=50:null;
+                    return<tr style={{background:C.panel}}>
+                      <td style={STD}><div style={{fontWeight:700}}>保險搭售率</div><div style={{color:C.textSec,fontSize:9}}>搭售數 / 手機銷售數 ≥50%</div></td>
+                      {filled.map(s=>{
+                        const f=sumEnt[s]||{};
+                        const ins=parseFloat(f.insurance_count)||0,phone=parseFloat(f.phone_sales)||0;
+                        const pct=(f.insurance_count!==undefined&&f.phone_sales!==undefined&&phone>0)?(ins/phone*100):null;
+                        const ok=pct!==null?pct>=50:null;
+                        return<td key={s} style={{...STD,textAlign:"center",background:ok===null?C.panel:ok?C.fallBg:C.riseBg}}>
+                          {pct!==null?<>
+                            <div style={{color:C.neutral,fontSize:10}}>搭:{ins} / 機:{phone}</div>
+                            <div style={{fontWeight:700,color:ok?C.fall:C.rise}}>{pct.toFixed(1)}% <ThreshBadge pct={pct} size={11}/></div>
+                          </>:<span style={{color:C.textDim}}>——</span>}
+                        </td>;
+                      })}
+                      <td style={{...STD,textAlign:"center",borderLeft:`1px solid ${C.accentDim}`,background:tMet===null?C.panel:tMet?C.fallBg:C.riseBg}}>
+                        {tPct!==null?<>
+                          <div style={{color:C.neutral,fontSize:10}}>搭:{tIns} / 機:{tPhone}</div>
+                          <div style={{fontWeight:700,color:tMet?C.fall:C.rise}}>{tPct.toFixed(1)}% <ThreshBadge pct={tPct} size={11}/></div>
+                        </>:"——"}
+                      </td>
+                    </tr>;
+                  })()}
+
                 </tbody>
               </table>
             </div>
             <div style={{padding:"6px 12px",fontSize:10,color:C.textDim,borderTop:`1px solid ${C.border}`}}>
-              ▲ 達標（紅）　▼ 未達標（綠）　目標：中型 / 小型
+              ▲ 達標（紅）　▼ 未達標（綠）　✓ 高於水位（綠）　⚠ 低於水位（紅）
             </div>
           </Panel>}
+
           {filled.length===0&&<div style={{textAlign:"center",padding:"60px 0",color:C.textDim,fontSize:13,letterSpacing:2}}>NO DATA — {sumDate}</div>}
         </>}
       </div>
