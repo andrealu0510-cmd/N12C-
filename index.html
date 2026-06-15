@@ -40,8 +40,8 @@ const C = {
   accent:"#1A5FA8", accentLight:"#E8F0FA",
   gold:"#C8A020", goldLight:"#FDF8E8",
   textPri:"#1A2332", textSec:"#5A7090", textDim:"#B0BCC8",
-  rise:"#D0283C", riseBg:"#FEF2F4", riseBdr:"#F0A0A8",
-  fall:"#00904A", fallBg:"#F0FBF5", fallBdr:"#80D4A8",
+  rise:"#00904A", riseBg:"#F0FBF5", riseBdr:"#80D4A8",   // 達標 → 綠色
+  fall:"#D0283C", fallBg:"#FEF2F4", fallBdr:"#F0A0A8",   // 未達標 → 紅色
   warn:"#C07000", warnBg:"#FDF5E0", warnBdr:"#E8C060",
   praise:"#1A5FA8", praiseBg:"#E8F0FA",
   req:"#E03030", reqBg:"#FFF0F0",
@@ -152,12 +152,12 @@ function Spin() {
 }
 function UpBadge({met, size=13}) {
   if (met===null) return <span style={{color:C.textDim,fontSize:size}}>─</span>;
-  return met ? <span style={{color:C.rise,fontSize:size,fontWeight:800}}>▲</span>
-             : <span style={{color:C.fall,fontSize:size,fontWeight:800}}>▼</span>;
+  return met ? <span style={{color:C.rise,fontSize:size,fontWeight:800}}>✓</span>
+             : <span style={{color:C.fall,fontSize:size,fontWeight:800}}>✗</span>;
 }
 function ThBadge({pct, size=13}) {
   if (pct===null) return <span style={{color:C.textDim,fontSize:size}}>─</span>;
-  return pct>=50 ? <span style={{color:C.fall,fontSize:size,fontWeight:800}}>✓</span>
+  return pct>=50 ? <span style={{color:C.rise,fontSize:size,fontWeight:800}}>✓</span>
                  : <span style={{color:C.rise,fontSize:size,fontWeight:800}}>⚠</span>;
 }
 function Bar({pct, color}) {
@@ -234,6 +234,7 @@ function KpiCard({item, value, store, onChange, showReq}) {
   const bdr = isReq ? C.req : met===null ? (isPr?`${C.praise}44`:isWn?C.warnBdr:C.border) : met?C.riseBdr:C.fallBdr;
   const bg  = isReq ? C.reqBg : met===null ? (isPr?C.praiseBg:isWn?C.warnBg:C.card) : met?C.riseBg:C.fallBg;
   const nc  = met===null ? (isPr?C.praise:isWn?C.warn:C.accent) : met?C.rise:C.fall;
+  const notMet = met === false;
 
   return (
     <div style={{background:bg,border:`1.5px solid ${bdr}`,borderRadius:8,padding:"10px 12px",transition:"all .3s"}}>
@@ -244,7 +245,8 @@ function KpiCard({item, value, store, onChange, showReq}) {
         </span>
         <div style={{display:"flex",alignItems:"center",gap:4}}>
           {target!==null && <span style={{fontSize:9,color:C.textDim}}>目標{target}{item.unit}</span>}
-          {item.hasTarget && met!==null && <UpBadge met={met} size={12}/>}
+          {item.hasTarget && met===true  && <span style={{fontSize:13}}>🏆</span>}
+          {item.hasTarget && met!==null  && <UpBadge met={met} size={12}/>}
           {isPr && <span style={{fontSize:12}}>👍</span>}
           {isWn && <span style={{fontSize:11,color:C.warn,fontWeight:700}}>⚠ 注意</span>}
         </div>
@@ -254,6 +256,12 @@ function KpiCard({item, value, store, onChange, showReq}) {
         style={{...SI, fontSize:20, fontWeight:800, color:nc, borderColor:bdr, background:"transparent"}}/>
       {item.unit && <div style={{fontSize:9,color:isReq?C.req:C.textDim,marginTop:2,textAlign:"right"}}>{item.unit}</div>}
       {item.hasTarget && target && <Bar pct={(parseFloat(value)||0)/target*100} color={met?C.rise:C.accent}/>}
+      {notMet && !empty && <div style={{
+        marginTop:6,padding:"4px 8px",
+        background:"#FFF0F0",border:`1px solid ${C.fall}44`,
+        borderRadius:5,fontSize:10,color:C.fall,fontWeight:700,
+        display:"flex",alignItems:"center",gap:4,
+      }}>⚠ 績效不能再離異！請即時調整</div>}
     </div>
   );
 }
@@ -387,6 +395,19 @@ function App() {
       await load(date);
       setSaved(true); setNet("ok");
       setSync(new Date().toLocaleTimeString("zh-TW",{hour:"2-digit",minute:"2-digit",hour12:false}));
+
+      // 檢查是否全部 KPI 達標 → 跳出表揚彈窗
+      const allMet = KPI_ITEMS.filter(i=>i.hasTarget).every(item => {
+        const t = getTarget(item.key, store);
+        if (t===null) return true;
+        const v = parseFloat(form[item.key]);
+        return !isNaN(v) && v >= t;
+      });
+      if (allMet) {
+        setTimeout(() => {
+          alert("🏆 恭喜！所有 KPI 全部達標！\n\n⭐ 今日表現優秀，繼續保持！\n💪 北一二C 最強！");
+        }, 300);
+      }
     } catch { setNet("error"); alert("儲存失敗，請確認網路連線"); }
     finally { setSaving(false); }
   };
@@ -637,7 +658,7 @@ function App() {
             <div className="card" style={{overflow:"hidden",marginBottom:10}}>
               <div style={{padding:"8px 14px",borderBottom:`1px solid ${C.border}`,display:"flex",justifyContent:"space-between"}}>
                 <span style={{fontSize:12,fontWeight:700,color:C.textPri}}>各店明細 — {sumDate}</span>
-                <span style={{fontSize:10,color:C.textSec}}>▲達標（紅）▼未達標（綠）✓高於水位⚠低於水位</span>
+                <span style={{fontSize:10,color:C.textSec}}>✓ 達標（綠）✗ 未達標（紅）✓ 高於水位 ⚠ 低於水位</span>
               </div>
               <div style={{overflowX:"auto"}}>
                 <table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
