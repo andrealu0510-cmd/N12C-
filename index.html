@@ -14,10 +14,24 @@ input[type=number]::-webkit-inner-spin-button,input[type=number]::-webkit-outer-
 input,select,textarea{color:#1A2332!important;background:#fff!important;}
 input::placeholder,textarea::placeholder{color:#B0BCC8;}
 select option{background:#fff;color:#1A2332;}
+
+@keyframes firework{
+  0%{transform:translate(-50%,-50%) scale(0);opacity:1;}
+  50%{transform:translate(-50%,-50%) scale(1.2);opacity:1;}
+  100%{transform:translate(-50%,-50%) scale(1.5);opacity:0;}
+}
+@keyframes particle{
+  0%{transform:translate(0,0) scale(1);opacity:1;}
+  100%{transform:translate(var(--tx),var(--ty)) scale(0);opacity:0;}
+}
+.firework-overlay{position:fixed;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:9999;}
 @keyframes ticker{from{transform:translateX(0)}to{transform:translateX(-50%)}}
 @keyframes spin{to{transform:rotate(360deg)}}
 @keyframes slideDown{from{opacity:0;transform:translateY(-6px)}to{opacity:1;transform:translateY(0)}}
 @keyframes fadeUp{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+@keyframes floatHeart{0%{transform:translateY(30px) scale(.8);opacity:0}20%{opacity:1}100%{transform:translateY(-130px) scale(1.25);opacity:0}}
+@keyframes trophyPop{0%{transform:translate(-50%,-50%) scale(.4) rotate(-8deg);opacity:0}45%{transform:translate(-50%,-50%) scale(1.12) rotate(5deg);opacity:1}100%{transform:translate(-50%,-50%) scale(1) rotate(0);opacity:1}}
+@keyframes badgePulse{0%,100%{transform:scale(1)}50%{transform:scale(1.08)}}
 ::-webkit-scrollbar{width:5px;height:5px;}
 ::-webkit-scrollbar-track{background:#F0F2F7;}
 ::-webkit-scrollbar-thumb{background:#C8D4E0;border-radius:3px;}
@@ -60,6 +74,7 @@ const TARGETS = {
   AQ999:{medium:2,small:1}, AQ1399:{medium:2,small:1},
   RT999:{medium:6,small:5}, RT1399:{medium:4,small:3},
   tewei:{medium:4,small:3},
+  broadband:{medium:2,small:2},
   accessory:{medium:6000,small:4500}, film:{medium:2800,small:1800},
 };
 const getTarget = (key, store) => {
@@ -81,7 +96,7 @@ const KPI_ITEMS = [
   {key:"RT1399",      label:"RT1399",      unit:"件", group:"RT", hasTarget:true},
   {key:"upgrade",     label:"升轉件數",    unit:"件", group:"UP", hasTarget:false, praiseGt:2},
   {key:"downgrade",   label:"降轉件數",    unit:"件", group:"UP", hasTarget:false, warnGt:2},
-  {key:"broadband",   label:"寬頻",        unit:"件", group:"OT", hasTarget:false},
+  {key:"broadband",   label:"寬頻",        unit:"件", group:"BB", hasTarget:true},
   {key:"tewei",       label:"特維",        unit:"件", group:"OT", hasTarget:true},
   {key:"accessory",   label:"配件",        unit:"元", group:"OT", hasTarget:true},
   {key:"film",        label:"包膜",        unit:"元", group:"OT", hasTarget:true},
@@ -93,8 +108,9 @@ const KPI_ITEMS = [
 
 const FIELD_LABELS = {
   AQ999:"AQ999", AQ1399:"AQ1399", RT999:"RT999", RT1399:"RT1399",
-  upgrade:"升轉件數", downgrade:"降轉件數", broadband:"寬頻", tewei:"特維",
-  accessory:"配件", film:"包膜", video_kkbox:"Video+KKBOX",
+  upgrade:"升轉件數", downgrade:"降轉件數", broadband:"寬頻件數",
+  broadband_500m:"是否為500M", broadband_guardian:"守護家筆數",
+  tewei:"特維", accessory:"配件", film:"包膜", video_kkbox:"Video+KKBOX",
   apple_service:"APPLE服務", hbo:"HBO", nf_p:"NF/P",
   device_num:"門號案", device_case:"設備案",
   insurance_count:"保險搭售數", phone_sales:"手機設備案銷售數",
@@ -116,6 +132,8 @@ const getPhaseInfo = () => {
 const emptyQixieRow = () => ({ handler:"", cust_status:"", product:"", plan:"", key_point:"", summary:"" });
 const emptyForm = () => ({
   ...Object.fromEntries(KPI_ITEMS.map(i => [i.key, ""])),
+  broadband_500m: "",       // 是否為500M：yes/no
+  broadband_guardian: "",   // 守護家筆數
   device_num:"", device_case:"",
   insurance_count:"", phone_sales:"",
   aq999_qixie:  [emptyQixieRow()],
@@ -155,6 +173,106 @@ function UpBadge({met, size=13}) {
   return met ? <span style={{color:C.rise,fontSize:size,fontWeight:800}}>✓</span>
              : <span style={{color:C.fall,fontSize:size,fontWeight:800}}>✗</span>;
 }
+
+// ── 煙火動畫元件 ─────────────────────────────────────────────
+function Fireworks({show, onDone, durationMs=1800}) {
+  const {useEffect, useRef} = React;
+  const ref = useRef(null);
+  useEffect(() => {
+    if (!show || !ref.current) return;
+    const canvas = ref.current;
+    const ctx = canvas.getContext('2d');
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+    const particles = [];
+    const colors = ['#00904A','#C8A020','#1A5FA8','#FFD700','#FF4444','#4ECDC4','#FF6B9D'];
+    const burst = (count=4) => {
+      for (let b = 0; b < count; b++) {
+      const x = Math.random() * canvas.width;
+      const y = Math.random() * canvas.height * 0.5 + 80;
+      const color = colors[Math.floor(Math.random() * colors.length)];
+      for (let i = 0; i < 35; i++) {
+        const angle = Math.random() * Math.PI * 2;
+        const speed = Math.random() * 7 + 2;
+        particles.push({x, y, vx: Math.cos(angle)*speed, vy: Math.sin(angle)*speed, color, life: 1, size: Math.random()*4+2});
+      }
+    }
+    };
+    let frame;
+    let start = 0;
+    let lastBurst = 0;
+    burst(8);
+    const animate = (ts) => {
+      if (!start) start = ts;
+      const elapsed = ts - start;
+      if (elapsed < durationMs && ts - lastBurst > 650) {
+        burst(3);
+        lastBurst = ts;
+      }
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      let alive = false;
+      particles.forEach(p => {
+        p.x += p.vx; p.y += p.vy; p.vy += 0.12; p.life -= 0.016;
+        if (p.life > 0) {
+          alive = true;
+          ctx.save(); ctx.globalAlpha = p.life;
+          ctx.fillStyle = p.color; ctx.beginPath();
+          ctx.arc(p.x, p.y, p.size * p.life, 0, Math.PI * 2);
+          ctx.fill(); ctx.restore();
+        }
+      });
+      if (alive || elapsed < durationMs) { frame = requestAnimationFrame(animate); }
+      else { if (onDone) onDone(); }
+    };
+    frame = requestAnimationFrame(animate);
+    return () => cancelAnimationFrame(frame);
+  }, [show, durationMs]);
+  if (!show) return null;
+  return <canvas ref={ref} style={{position:"fixed",top:0,left:0,width:"100%",height:"100%",pointerEvents:"none",zIndex:9999}}/>;
+}
+
+function CelebrationOverlay({celebration, onDone}) {
+  const {useEffect, useMemo} = React;
+  useEffect(() => {
+    if (!celebration) return;
+    const id = setTimeout(() => { if (onDone) onDone(); }, 8000);
+    return () => clearTimeout(id);
+  }, [celebration]);
+
+  const hearts = useMemo(() => Array.from({length:22}).map((_,i) => ({
+    id:i, left:8 + Math.random()*84, bottom:8 + Math.random()*22,
+    size:22 + Math.random()*18, duration:6.8 + Math.random()*1.2, delay:Math.random()*.45,
+  })), [celebration]);
+  if (!celebration) return null;
+  const types = celebration.types || [];
+  const showHearts = types.includes("heart");
+  const showTrophy = types.includes("trophy");
+  return (
+    <>
+      <Fireworks show={types.includes("fireworks")} durationMs={8000} />
+      <div style={{position:"fixed",inset:0,pointerEvents:"none",zIndex:10000,display:"flex",alignItems:"center",justifyContent:"center"}}>
+        {showHearts && hearts.map(h => (
+          <span key={h.id} style={{
+            position:"absolute",left:`${h.left}%`,bottom:`${h.bottom}%`,
+            fontSize:h.size,animation:`floatHeart ${h.duration}s ease-out ${h.delay}s forwards`,
+          }}>♥</span>
+        ))}
+        <div style={{
+          position:"absolute",left:"50%",top:"45%",transform:"translate(-50%,-50%)",
+          minWidth:260,maxWidth:"calc(100vw - 40px)",padding:"16px 22px",
+          borderRadius:12,background:"rgba(255,255,255,.96)",border:`2px solid ${showTrophy?C.gold:C.riseBdr}`,
+          boxShadow:"0 12px 32px rgba(26,35,50,.22)",textAlign:"center",
+          animation:showTrophy?"trophyPop .55s ease-out both":"fadeUp .35s ease both",
+        }}>
+          <div style={{fontSize:showTrophy?46:34,lineHeight:1,marginBottom:8}}>{showTrophy?"🏆":showHearts?"♥":"🎉"}</div>
+          <div style={{fontSize:16,fontWeight:900,color:C.textPri,marginBottom:4}}>{celebration.title}</div>
+          <div style={{fontSize:12,fontWeight:700,color:C.textSec,lineHeight:1.5,whiteSpace:"pre-line"}}>{celebration.message}</div>
+        </div>
+      </div>
+    </>
+  );
+}
+
 function ThBadge({pct, size=13}) {
   if (pct===null) return <span style={{color:C.textDim,fontSize:size}}>─</span>;
   return pct>=50 ? <span style={{color:C.rise,fontSize:size,fontWeight:800}}>✓</span>
@@ -300,6 +418,7 @@ function App() {
   const [locked,  setLocked]  = useState(checkLocked());
   const [phase2,  setPhase2]  = useState(checkPhase2());
   const [phInfo,  setPhInfo]  = useState(getPhaseInfo());
+  const [celebration, setCelebration] = useState(null);
 
   // 每秒更新時鐘 & 階段
   useEffect(() => {
@@ -354,9 +473,74 @@ function App() {
   const qRemove = (key, i) => { const a = (form[key]||[]).filter((_,j) => j!==i); setForm(p => ({...p, [key]: a.length ? a : [emptyQixieRow()]})); setSaved(false); };
   const qChange = (key, i, f, v) => { const a = [...(form[key]||[])]; a[i] = {...a[i], [f]:v}; setForm(p => ({...p, [key]: a})); setSaved(false); };
 
-  // 請益觸發：欄位有填值（含0）才展開
-  const needAQ  = String(form.AQ999).trim()  !== "" && form.AQ999  !== undefined && form.AQ999  !== null;
-  const needRT  = String(form.RT1399).trim() !== "" && form.RT1399 !== undefined && form.RT1399 !== null;
+  // 請益觸發：AQ999/RT1399 填入 0 才展開
+  const needAQ  = String(form.AQ999).trim()  === "0";
+  const needRT  = String(form.RT1399).trim() === "0";
+
+  const isFilledNumber = v => v !== "" && v !== undefined && v !== null && !isNaN(parseFloat(v));
+  const getKpiAwardProgress = data => {
+    const devNow = calcDev(data);
+    const insNow = calcIns(data);
+    const checks = [
+      ...KPI_ITEMS.map(item => ({
+        label:item.label,
+        passed:isFilledNumber(data[item.key]) && (!item.hasTarget || meetsTarget(item.key, data[item.key], store) === true),
+      })),
+      {
+        label:"設備案佔比",
+        passed:isFilledNumber(data.device_num) && isFilledNumber(data.device_case) && devNow.pct !== null && devNow.pct > 50,
+      },
+      {
+        label:"保險搭售率",
+        passed:isFilledNumber(data.insurance_count) && isFilledNumber(data.phone_sales) && insNow.pct !== null && insNow.pct >= 50,
+      },
+    ];
+    const passedItems = checks.filter(i => i.passed).length;
+    return { passedItems, totalItems:checks.length, pct:passedItems / checks.length * 100, allPassed:passedItems === checks.length };
+  };
+
+  const buildCelebration = data => {
+    const types = new Set();
+    const lines = [];
+    const hitFireworks = [
+      meetsTarget("AQ999", data.AQ999, store) === true && "AQ999",
+      meetsTarget("RT1399", data.RT1399, store) === true && "RT1399",
+      meetsTarget("broadband", data.broadband, store) === true && "寬頻",
+    ].filter(Boolean);
+    if (hitFireworks.length) {
+      types.add("fireworks");
+      lines.push(`煙火：${hitFireworks.join("、")} 達標`);
+    }
+
+    const insNow = calcIns(data);
+    const hitHearts = [
+      meetsTarget("accessory", data.accessory, store) === true && "配件",
+      meetsTarget("film", data.film, store) === true && "包膜",
+      insNow.pct !== null && insNow.pct >= 50 && "保險搭售",
+    ].filter(Boolean);
+    if (hitHearts.length) {
+      types.add("heart");
+      lines.push(`愛心：${hitHearts.join("、")} 達標`);
+    }
+
+    const devNow = calcDev(data);
+    if (devNow.pct !== null && devNow.pct > 50) {
+      lines.push(`肯定：設備案佔比 ${devNow.pct.toFixed(1)}%`);
+    }
+
+    const progress = getKpiAwardProgress(data);
+    if (progress.allPassed) {
+      types.add("trophy");
+      lines.push(`獎杯：16 項 KPI 已回填且達標`);
+    }
+
+    if (!types.size && !lines.length) return null;
+    return {
+      types: Array.from(types),
+      title: types.has("trophy") ? "回填進度達標！" : "達標獎勵觸發！",
+      message: lines.join("\n"),
+    };
+  };
 
   // ── 儲存 ─────────────────────────────────────────────────
   const save = async () => {
@@ -365,7 +549,7 @@ function App() {
 
     setTried(true);
 
-    const ALL_KEYS = [...KPI_ITEMS.map(i => i.key), "device_num","device_case","insurance_count","phone_sales"];
+    const ALL_KEYS = [...KPI_ITEMS.map(i => i.key), "broadband_500m","broadband_guardian","device_num","device_case","insurance_count","phone_sales"];
 
     // 第一階段：全欄位必填
     if (!phase2) {
@@ -396,18 +580,8 @@ function App() {
       setSaved(true); setNet("ok");
       setSync(new Date().toLocaleTimeString("zh-TW",{hour:"2-digit",minute:"2-digit",hour12:false}));
 
-      // 檢查是否全部 KPI 達標 → 跳出表揚彈窗
-      const allMet = KPI_ITEMS.filter(i=>i.hasTarget).every(item => {
-        const t = getTarget(item.key, store);
-        if (t===null) return true;
-        const v = parseFloat(form[item.key]);
-        return !isNaN(v) && v >= t;
-      });
-      if (allMet) {
-        setTimeout(() => {
-          alert("🏆 恭喜！所有 KPI 全部達標！\n\n⭐ 今日表現優秀，繼續保持！\n💪 北一二C 最強！");
-        }, 300);
-      }
+      const nextCelebration = buildCelebration(form);
+      if (nextCelebration) setCelebration(nextCelebration);
     } catch { setNet("error"); alert("儲存失敗，請確認網路連線"); }
     finally { setSaving(false); }
   };
@@ -560,11 +734,42 @@ function App() {
               </div>
             </div>
 
+            {/* 寬頻 */}
+            <div style={{marginBottom:10}}>
+              <SL label="寬頻" color="#0D7A8A"/>
+              <div style={{border:`1px solid ${meetsTarget("broadband",form.broadband,store)===true?C.riseBdr:meetsTarget("broadband",form.broadband,store)===false?C.fallBdr:C.border}`,borderRadius:8,padding:"12px",background:meetsTarget("broadband",form.broadband,store)===true?C.riseBg:meetsTarget("broadband",form.broadband,store)===false?C.fallBg:C.cardAlt}}>
+                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8}}>
+                  <div>
+                    <div style={{fontSize:10,color:C.textSec,marginBottom:4,fontWeight:500}}>寬頻件數 <span style={{color:C.textDim,fontSize:9}}>目標2件</span></div>
+                    <KpiCard item={{key:"broadband",label:"寬頻",unit:"件",group:"BB",hasTarget:true}} value={form.broadband} store={store} onChange={v => setF("broadband",v)} showReq={tried && !phase2 && form.broadband===""}/>
+                  </div>
+                  <div>
+                    <div style={{fontSize:10,color:C.textSec,marginBottom:4,fontWeight:500}}>是否為 500M</div>
+                    <select value={form.broadband_500m} onChange={e => {setF("broadband_500m", e.target.value);}} style={{...SI, fontSize:14}} disabled={locked}>
+                      <option value="">── 請選擇 ──</option>
+                      <option value="yes">✓ 是（500M）</option>
+                      <option value="no">✗ 否</option>
+                    </select>
+                    {tried && !phase2 && form.broadband_500m==="" && <div style={{fontSize:9,color:C.req,marginTop:3,fontWeight:700}}>必填</div>}
+                  </div>
+                  <div>
+                    <div style={{fontSize:10,color:C.textSec,marginBottom:4,fontWeight:500}}>守護家筆數</div>
+                    <input type="number" min={0} placeholder="0" value={form.broadband_guardian}
+                      onChange={e => {setF("broadband_guardian", e.target.value);}} disabled={locked}
+                      style={{...SI, fontSize:18, fontWeight:700, color:C.accent,
+                        borderColor:tried && !phase2 && form.broadband_guardian===""?C.req:C.border,
+                        background:tried && !phase2 && form.broadband_guardian===""?C.reqBg:"#fff"}}/>
+                    {tried && !phase2 && form.broadband_guardian==="" && <div style={{fontSize:9,color:C.req,marginTop:3,fontWeight:700}}>必填</div>}
+                  </div>
+                </div>
+              </div>
+            </div>
+
             {/* 設備案 */}
-            <div style={{border:`1px solid ${dev.pct!==null?dev.pct>=50?C.fallBdr:C.riseBdr:C.border}`,borderRadius:8,padding:"12px",marginBottom:8,background:dev.pct!==null?dev.pct>=50?C.fallBg:C.riseBg:C.cardAlt}}>
+            <div style={{border:`1px solid ${dev.pct!==null?dev.pct>=50?C.riseBdr:C.fallBdr:C.border}`,borderRadius:8,padding:"12px",marginBottom:8,background:dev.pct!==null?dev.pct>=50?C.riseBg:C.fallBg:C.cardAlt}}>
               <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
                 <span style={{fontSize:12,fontWeight:700,color:C.textPri}}>設備案 / 門號案 / 總數 / 設備案佔比</span>
-                <span style={{fontSize:10,color:C.textSec,background:"#EEF2F8",borderRadius:4,padding:"2px 7px"}}>低水位 &lt;50%</span>
+                <span style={{fontSize:10,color:dev.pct!==null&&dev.pct>50?C.rise:C.textSec,background:dev.pct!==null&&dev.pct>50?C.riseBg:"#EEF2F8",border:`1px solid ${dev.pct!==null&&dev.pct>50?C.riseBdr:"transparent"}`,borderRadius:4,padding:"2px 7px",fontWeight:dev.pct!==null&&dev.pct>50?800:400,animation:dev.pct!==null&&dev.pct>50?"badgePulse 1.4s ease-in-out infinite":"none"}}>{dev.pct!==null&&dev.pct>50?"肯定標示：設備案 >50%":"低水位 <50%"}</span>
               </div>
               <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr",gap:8}}>
                 <NumInput label="門號案" fkey="device_num" value={form.device_num} onChange={setF} showReq={tried && !phase2} disabled={locked}/>
@@ -576,17 +781,18 @@ function App() {
                 <div>
                   <div style={{fontSize:10,color:C.textSec,marginBottom:4}}>佔比（自動）</div>
                   <div style={{display:"flex",alignItems:"center",gap:6}}>
-                    <div style={{...SI,flex:1,fontSize:18,fontWeight:800,textAlign:"center",color:dev.pct===null?C.textDim:dev.pct>=50?C.fall:C.rise,borderColor:dev.pct===null?C.border:dev.pct>=50?C.fallBdr:C.riseBdr}}>{dev.pct!==null?`${dev.pct.toFixed(1)}%`:"—"}</div>
+                    <div style={{...SI,flex:1,fontSize:18,fontWeight:800,textAlign:"center",color:dev.pct===null?C.textDim:dev.pct>=50?C.rise:C.fall,borderColor:dev.pct===null?C.border:dev.pct>=50?C.riseBdr:C.fallBdr}}>{dev.pct!==null?`${dev.pct.toFixed(1)}%`:"—"}</div>
                     <ThBadge pct={dev.pct} size={20}/>
                   </div>
-                  {dev.pct!==null && <Bar pct={dev.pct} color={dev.pct>=50?C.fall:C.rise}/>}
+                  {dev.pct!==null && <Bar pct={dev.pct} color={dev.pct>=50?C.rise:C.fall}/>}
                 </div>
               </div>
-              {dev.pct!==null && dev.pct<50 && <div style={{marginTop:8,padding:"6px 10px",background:C.riseBg,border:`1px solid ${C.riseBdr}`,borderRadius:5,fontSize:11,color:C.rise,fontWeight:600}}>⚠ 設備案佔比 {dev.pct.toFixed(1)}%，低於 50% 低水位</div>}
+              {dev.pct!==null && dev.pct>50 && <div style={{marginTop:8,padding:"6px 10px",background:C.riseBg,border:`1px solid ${C.riseBdr}`,borderRadius:5,fontSize:11,color:C.rise,fontWeight:800}}>✓ 肯定標示：設備案佔比 {dev.pct.toFixed(1)}%，高於 50%</div>}
+              {dev.pct!==null && dev.pct<=50 && <div style={{marginTop:8,padding:"6px 10px",background:C.fallBg,border:`1px solid ${C.fallBdr}`,borderRadius:5,fontSize:11,color:C.fall,fontWeight:600}}>⚠ 設備案佔比 {dev.pct.toFixed(1)}%，低於或等於 50% 低水位</div>}
             </div>
 
             {/* 保險 */}
-            <div style={{border:`1px solid ${ins.pct!==null?ins.pct>=50?C.fallBdr:C.riseBdr:C.border}`,borderRadius:8,padding:"12px",marginBottom:10,background:ins.pct!==null?ins.pct>=50?C.fallBg:C.riseBg:C.cardAlt}}>
+            <div style={{border:`1px solid ${ins.pct!==null?ins.pct>=50?C.riseBdr:C.fallBdr:C.border}`,borderRadius:8,padding:"12px",marginBottom:10,background:ins.pct!==null?ins.pct>=50?C.riseBg:C.fallBg:C.cardAlt}}>
               <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
                 <span style={{fontSize:12,fontWeight:700,color:C.textPri}}>保險搭售率</span>
                 <span style={{fontSize:10,color:C.textSec,background:"#EEF2F8",borderRadius:4,padding:"2px 7px"}}>目標 ≥50%</span>
@@ -597,10 +803,10 @@ function App() {
                 <div>
                   <div style={{fontSize:10,color:C.textSec,marginBottom:4}}>搭售率（自動）</div>
                   <div style={{display:"flex",alignItems:"center",gap:6}}>
-                    <div style={{...SI,flex:1,fontSize:18,fontWeight:800,textAlign:"center",color:ins.pct===null?C.textDim:ins.pct>=50?C.fall:C.rise,borderColor:ins.pct===null?C.border:ins.pct>=50?C.fallBdr:C.riseBdr}}>{ins.pct!==null?`${ins.pct.toFixed(1)}%`:"—"}</div>
+                    <div style={{...SI,flex:1,fontSize:18,fontWeight:800,textAlign:"center",color:ins.pct===null?C.textDim:ins.pct>=50?C.rise:C.fall,borderColor:ins.pct===null?C.border:ins.pct>=50?C.riseBdr:C.fallBdr}}>{ins.pct!==null?`${ins.pct.toFixed(1)}%`:"—"}</div>
                     <ThBadge pct={ins.pct} size={20}/>
                   </div>
-                  {ins.pct!==null && <Bar pct={ins.pct} color={ins.pct>=50?C.fall:C.rise}/>}
+                  {ins.pct!==null && <Bar pct={ins.pct} color={ins.pct>=50?C.rise:C.fall}/>}
                 </div>
               </div>
               {ins.pct!==null && ins.pct<50 && <div style={{marginTop:8,padding:"6px 10px",background:C.riseBg,border:`1px solid ${C.riseBdr}`,borderRadius:5,fontSize:11,color:C.rise,fontWeight:600}}>⚠ 保險搭售率 {ins.pct.toFixed(1)}%，低於 50%，請加強推薦</div>}
@@ -633,7 +839,7 @@ function App() {
 
             {/* 送出 */}
             <div style={{display:"flex",gap:8}}>
-              <button onClick={save} disabled={saving||locked} style={{flex:1,padding:"13px 0",background:locked?"#EEF0F4":saved?C.fallBg:C.accent,border:`2px solid ${locked?"#C8D0DC":saved?C.fallBdr:C.accent}`,color:locked?"#A0AABB":saved?C.fall:"#fff",borderRadius:8,fontWeight:800,fontSize:14,cursor:saving||locked?"not-allowed":"pointer",fontFamily:"inherit",boxShadow:saved||locked?"none":`0 2px 8px ${C.accent}44`,opacity:saving?.7:1}}>
+              <button onClick={save} disabled={saving||locked} style={{flex:1,padding:"13px 0",background:locked?"#EEF0F4":saved?C.riseBg:C.accent,border:`2px solid ${locked?"#C8D0DC":saved?C.riseBdr:C.accent}`,color:locked?"#A0AABB":saved?C.rise:"#fff",borderRadius:8,fontWeight:800,fontSize:14,cursor:saving||locked?"not-allowed":"pointer",fontFamily:"inherit",boxShadow:saved||locked?"none":`0 2px 8px ${C.accent}44`,opacity:saving?.7:1}}>
                 {locked?"⛔ 已鎖檔（24:00）":saving?<><Spin/>儲存中...</>:saved?"▲ 已儲存":"儲存資料"}
               </button>
               <button onClick={() => { setForm(emptyForm()); setSaved(false); setTried(false); }} disabled={locked} style={{padding:"13px 20px",background:"#fff",border:`1px solid ${C.border}`,color:locked?C.textDim:C.textSec,borderRadius:8,fontSize:13,cursor:locked?"not-allowed":"pointer",fontFamily:"inherit"}}>清除</button>
@@ -648,8 +854,8 @@ function App() {
               <div><div style={{fontSize:11,color:C.textSec,marginBottom:4,fontWeight:500}}>彙整日期</div><input type="date" value={sumDate} onChange={e => setSumDate(e.target.value)} style={{...SI,width:160}}/></div>
               <button onClick={() => load(sumDate)} style={{background:"#fff",border:`1px solid ${C.border}`,color:C.textSec,borderRadius:6,fontSize:12,padding:"8px 14px",cursor:"pointer",fontFamily:"inherit",marginTop:16}}>{net==="loading"?<Spin/>:"↻"} 更新</button>
               <div style={{display:"flex",gap:8,flexWrap:"wrap",marginTop:16}}>
-                {filled.length>0 && <div style={{fontSize:11,border:`1px solid ${C.fallBdr}`,borderRadius:5,padding:"5px 12px",color:C.fall,fontWeight:600,background:C.fallBg}}>▲ 已回填 {filled.length} 家</div>}
-                {missing.length>0 && <div style={{fontSize:11,border:`1px solid ${C.riseBdr}`,borderRadius:5,padding:"5px 12px",color:C.rise,background:C.riseBg}}>▼ 未回填：{missing.map(s=>`${s}(${isMedium(s)?"中":"小"})`).join("、")}</div>}
+                {filled.length>0 && <div style={{fontSize:11,border:`1px solid ${C.riseBdr}`,borderRadius:5,padding:"5px 12px",color:C.rise,fontWeight:600,background:C.riseBg}}>✓ 已回填 {filled.length} 家</div>}
+                {missing.length>0 && <div style={{fontSize:11,border:`1px solid ${C.fallBdr}`,borderRadius:5,padding:"5px 12px",color:C.fall,background:C.fallBg}}>✗ 未回填：{missing.map(s=>`${s}(${isMedium(s)?"中":"小"})`).join("、")}</div>}
               </div>
             </div>
           </div>
@@ -700,6 +906,38 @@ function App() {
                       </tr>;
                     })}
 
+                    {/* 寬頻500M & 守護家 */}
+                    {(()=>{
+                      const tot500m = filled.filter(s => sumEnt[s]?.broadband_500m==="yes").length;
+                      const totGuard = sumItem("broadband_guardian");
+                      return <>
+                        <tr style={{background:C.cardAlt}}>
+                          <td style={{...TD,fontWeight:600}}>寬頻是否500M<div style={{fontSize:9,color:C.textSec}}>是/否</div></td>
+                          {filled.map(s=>{
+                            const v=sumEnt[s]?.broadband_500m;
+                            return<td key={s} style={{...TD,textAlign:"center",background:v==="yes"?C.riseBg:v==="no"?C.fallBg:C.cardAlt}}>
+                              {v==="yes"?<span style={{color:C.rise,fontWeight:700}}>✓ 是</span>:v==="no"?<span style={{color:C.fall,fontWeight:700}}>✗ 否</span>:<span style={{color:C.textDim}}>—</span>}
+                            </td>;
+                          })}
+                          <td style={{...TD,textAlign:"center",fontWeight:700,color:C.gold,borderLeft:`2px solid ${C.gold}44`,background:C.goldLight}}>
+                            {tot500m} 家為500M
+                          </td>
+                        </tr>
+                        <tr style={{background:C.card}}>
+                          <td style={{...TD,fontWeight:600}}>守護家筆數</td>
+                          {filled.map(s=>{
+                            const v=sumEnt[s]?.broadband_guardian;
+                            return<td key={s} style={{...TD,textAlign:"center"}}>
+                              {v!==""&&v!==undefined?<span style={{fontWeight:700,color:C.accent}}>{v} 筆</span>:<span style={{color:C.textDim}}>—</span>}
+                            </td>;
+                          })}
+                          <td style={{...TD,textAlign:"center",fontWeight:700,color:C.gold,borderLeft:`2px solid ${C.gold}44`,background:C.goldLight}}>
+                            {totGuard!==null?`${totGuard} 筆`:"—"}
+                          </td>
+                        </tr>
+                      </>;
+                    })()}
+
                     {/* 設備案 */}
                     {(() => {
                       const tN=sumItem("device_num"), tC=sumItem("device_case");
@@ -711,12 +949,12 @@ function App() {
                           const f=sumEnt[s]||{}, n=parseFloat(f.device_num)||0, c=parseFloat(f.device_case)||0;
                           const t=f.device_num!==undefined||f.device_case!==undefined?n+c:null;
                           const p=t>0?(c/t*100):null, ok=p!==null?p>=50:null;
-                          return <td key={s} style={{...TD,textAlign:"center",background:ok===null?C.cardAlt:ok?C.fallBg:C.riseBg}}>
-                            {t!==null?<><div style={{fontSize:10,color:C.textSec}}>門:{f.device_num||0} 設:{f.device_case||0} 計:{t}</div><div style={{fontWeight:700,fontSize:13,color:ok?C.fall:C.rise}}>{p!==null?`${p.toFixed(1)}%`:"—"} <ThBadge pct={p} size={11}/></div><Bar pct={p||0} color={ok?C.fall:C.rise}/></>:<span style={{color:C.textDim}}>—</span>}
+                          return <td key={s} style={{...TD,textAlign:"center",background:ok===null?C.cardAlt:ok?C.riseBg:C.fallBg}}>
+                            {t!==null?<><div style={{fontSize:10,color:C.textSec}}>門:{f.device_num||0} 設:{f.device_case||0} 計:{t}</div><div style={{fontWeight:700,fontSize:13,color:ok?C.rise:C.fall}}>{p!==null?`${p.toFixed(1)}%`:"—"} <ThBadge pct={p} size={11}/></div><Bar pct={p||0} color={ok?C.rise:C.fall}/></>:<span style={{color:C.textDim}}>—</span>}
                           </td>;
                         })}
-                        <td style={{...TD,textAlign:"center",borderLeft:`2px solid ${C.gold}44`,background:tOk===null?C.cardAlt:tOk?C.fallBg:C.riseBg}}>
-                          {tT!==null?<><div style={{fontSize:10,color:C.textSec}}>門:{tN||0} 設:{tC||0} 計:{tT}</div><div style={{fontWeight:700,fontSize:13,color:tOk?C.fall:C.rise}}>{tP!==null?`${tP.toFixed(1)}%`:"—"} <ThBadge pct={tP} size={11}/></div></>:"—"}
+                        <td style={{...TD,textAlign:"center",borderLeft:`2px solid ${C.gold}44`,background:tOk===null?C.cardAlt:tOk?C.riseBg:C.fallBg}}>
+                          {tT!==null?<><div style={{fontSize:10,color:C.textSec}}>門:{tN||0} 設:{tC||0} 計:{tT}</div><div style={{fontWeight:700,fontSize:13,color:tOk?C.rise:C.fall}}>{tP!==null?`${tP.toFixed(1)}%`:"—"} <ThBadge pct={tP} size={11}/></div></>:"—"}
                         </td>
                       </tr>;
                     })()}
@@ -730,8 +968,8 @@ function App() {
                         {filled.map(s => {
                           const f=sumEnt[s]||{}, i=parseFloat(f.insurance_count)||0, p=parseFloat(f.phone_sales)||0;
                           const pct=(f.insurance_count!==undefined&&f.phone_sales!==undefined&&p>0)?(i/p*100):null, ok=pct!==null?pct>=50:null;
-                          return <td key={s} style={{...TD,textAlign:"center",background:ok===null?C.card:ok?C.fallBg:C.riseBg}}>
-                            {pct!==null?<><div style={{fontSize:10,color:C.textSec}}>搭:{i} / 機:{p}</div><div style={{fontWeight:700,fontSize:13,color:ok?C.fall:C.rise}}>{pct.toFixed(1)}% <ThBadge pct={pct} size={11}/></div></>:<span style={{color:C.textDim}}>—</span>}
+                          return <td key={s} style={{...TD,textAlign:"center",background:ok===null?C.card:ok?C.riseBg:C.fallBg}}>
+                            {pct!==null?<><div style={{fontSize:10,color:C.textSec}}>搭:{i} / 機:{p}</div><div style={{fontWeight:700,fontSize:13,color:ok?C.rise:C.fall}}>{pct.toFixed(1)}% <ThBadge pct={pct} size={11}/></div></>:<span style={{color:C.textDim}}>—</span>}
                           </td>;
                         })}
                         <td style={{...TD,textAlign:"center",borderLeft:`2px solid ${C.gold}44`,background:tOk===null?C.card:tOk?C.fallBg:C.riseBg}}>
@@ -771,10 +1009,12 @@ function App() {
           {filled.length===0 && <div style={{textAlign:"center",padding:"60px 0",color:C.textDim,fontSize:13}}>{sumDate} 尚無回填資料</div>}
         </>}
       </div>
+      <CelebrationOverlay celebration={celebration} onDone={() => setCelebration(null)}/>
     </div>
   );
 }
 
+// Fireworks added to App render
 const root = ReactDOM.createRoot(document.getElementById("root"));
 root.render(<App/>);
 </script>
