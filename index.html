@@ -354,9 +354,9 @@ function App() {
   const qRemove = (key, i) => { const a = (form[key]||[]).filter((_,j) => j!==i); setForm(p => ({...p, [key]: a.length ? a : [emptyQixieRow()]})); setSaved(false); };
   const qChange = (key, i, f, v) => { const a = [...(form[key]||[])]; a[i] = {...a[i], [f]:v}; setForm(p => ({...p, [key]: a})); setSaved(false); };
 
-  // 請益觸發：欄位有值（含0）
-  const needAQ  = form.AQ999  !== "";
-  const needRT  = form.RT1399 !== "";
+  // 請益觸發：欄位有填值（含0）才展開
+  const needAQ  = String(form.AQ999).trim()  !== "" && form.AQ999  !== undefined && form.AQ999  !== null;
+  const needRT  = String(form.RT1399).trim() !== "" && form.RT1399 !== undefined && form.RT1399 !== null;
 
   // ── 儲存 ─────────────────────────────────────────────────
   const save = async () => {
