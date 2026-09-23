@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
+<meta name="theme-color" content="#15306f">
+<title>北一二C｜每日管理登入</title>
+<style>
+:root{--blue:#15306f;--yellow:#ffd928;--bg:#f4f6fb;--line:#d7ddeb;--muted:#6f7684}
+*{box-sizing:border-box}
+body{margin:0;min-height:100vh;display:grid;place-items:center;background:var(--bg);font-family:-apple-system,BlinkMacSystemFont,"Noto Sans TC","Microsoft JhengHei",Arial,sans-serif;color:#171717;padding:18px}
+.card{width:min(430px,100%);background:#fff;border:2px solid var(--blue);border-radius:16px;overflow:hidden;box-shadow:0 12px 32px rgba(20,42,90,.12)}
+.head{background:var(--blue);color:#fff;padding:20px 22px}
+.brand{font-size:13px;font-weight:800;opacity:.9}.head h1{font-size:24px;margin:4px 0 0}.body{padding:22px}
+label{display:block;font-size:13px;font-weight:850;margin:12px 0 5px;color:#596174}
+input{width:100%;padding:12px 13px;border:1px solid #b9c2d5;border-radius:9px;font-size:16px}
+button{width:100%;margin-top:18px;padding:12px;border:0;border-radius:9px;background:var(--yellow);color:#111;font-size:16px;font-weight:950;cursor:pointer}
+.err{display:none;background:#fff0f0;border:1px solid #f5b8bd;color:#b00000;border-radius:8px;padding:9px 10px;font-size:13px;font-weight:800;margin-bottom:8px}
+.note{font-size:12px;color:var(--muted);margin-top:12px;line-height:1.55}
+.loading{display:none;text-align:center;padding:10px;font-weight:850;color:var(--blue)}
+.small{font-size:11px;color:#858b98;text-align:center;margin-top:8px}
+</style>
+</head>
+<body>
+<div class="card">
+  <div class="head">
+    <div class="brand">台灣大哥大｜北一二C</div>
+    <h1>每日管理檢閱</h1>
+  </div>
+  <div class="body">
+    <div id="err" class="err"></div>
+    <form id="loginForm">
+      <label>登入帳號</label>
+      <input id="username" autocomplete="username" inputmode="numeric" required autofocus>
+      <label>登入密碼</label>
+      <input id="password" type="password" autocomplete="current-password" required>
+      <button id="loginBtn" type="submit">登入</button>
+    </form>
+    <div id="loading" class="loading">登入驗證中…</div>
+    <div class="note">登入後即可每天上傳 010103／010105。報表會在瀏覽器本機解析；固定網址可在手機與電腦開啟。</div>
+    <div class="small">北一二C 固定管理網頁</div>
+  </div>
+</div>
+
+<script>
+const API = "https://zgpuuliqtrpdjerniyio.supabase.co/functions/v1/n12c-kpi-api";
+const TOKEN_KEY = "n12c_fixed_token_v1";
+const err = document.getElementById("err");
+const form = document.getElementById("loginForm");
+const loading = document.getElementById("loading");
+
+function showError(msg){
+  err.textContent = msg;
+  err.style.display = "block";
+}
+function setLoading(on){
+  form.style.display = on ? "none" : "block";
+  loading.style.display = on ? "block" : "none";
+}
+function decodeB64Utf8(b64){
+  const raw = atob(b64);
+  const bytes = new Uint8Array(raw.length);
+  for(let i=0;i<raw.length;i++) bytes[i]=raw.charCodeAt(i);
+  return new TextDecoder("utf-8").decode(bytes);
+}
+function mountApp(b64){
+  const html = decodeB64Utf8(b64);
+  document.open();
+  document.write(html);
+  document.close();
+}
+async function callApi(payload){
+  const r = await fetch(API,{
+    method:"POST",
+    headers:{"Content-Type":"application/json"},
+    body:JSON.stringify(payload),
+    mode:"cors",
+    cache:"no-store"
+  });
+  let data;
+  try{ data = await r.json(); }catch(e){ throw new Error("伺服器回應格式異常"); }
+  if(!r.ok || !data.ok) throw new Error(data.error || "登入失敗");
+  return data;
+}
+async function restore(){
+  const token = localStorage.getItem(TOKEN_KEY);
+  if(!token) return;
+  setLoading(true);
+  try{
+    const data = await callApi({action:"app",token});
+    mountApp(data.app_b64);
+  }catch(e){
+    localStorage.removeItem(TOKEN_KEY);
+    setLoading(false);
+  }
+}
+form.addEventListener("submit",async e=>{
+  e.preventDefault();
+  err.style.display="none";
+  setLoading(true);
+  try{
+    const data = await callApi({
+      action:"login",
+      username:document.getElementById("username").value.trim(),
+      password:document.getElementById("password").value
+    });
+    localStorage.setItem(TOKEN_KEY,data.token);
+    mountApp(data.app_b64);
+  }catch(e){
+    setLoading(false);
+    showError(e.message || "無法登入");
+  }
+});
+restore();
+</script>
+</body>
+</html>
