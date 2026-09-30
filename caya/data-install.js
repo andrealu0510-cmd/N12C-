@@ -131,6 +131,8 @@
   function start() {
     const frame = document.getElementById('appFrame');
     if (!frame) { install(document); return; }
+    // Permit the local CAYA submit handler; the portal CSP still blocks native form navigation.
+    frame.sandbox.add('allow-forms');
     const error = document.getElementById('loadError');
     const update = document.getElementById('excelOpen');
     const sync = () => { if (update) update.disabled = frame.hidden; };
