@@ -1,0 +1,29 @@
+name: CAYA release health
+on:
+  push:
+    paths:
+      - '.github/workflows/caya-release-health.yml'
+permissions: {}
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    steps:
+      - name: Check deployed data and access control
+        shell: bash
+        run: |
+          python - <<'PY'
+          import json, urllib.request, urllib.error
+          base = 'https://zgpuuliqtrpdjerniyio.supabase.co/functions/v1/caya-price-api/'
+          with urllib.request.urlopen(base + 'health', timeout=120) as r:
+              state = json.load(r)
+          print('Public health:', json.dumps(state))
+          assert state.get('ok') and state.get('data_ready'), 'No published release'
+          try:
+              urllib.request.urlopen(base + 'app', timeout=30)
+          except urllib.error.HTTPError as error:
+              assert error.code == 401, 'Unexpected unauthenticated status'
+              print('Private application: unauthenticated access denied (401)')
+          else:
+              raise AssertionError('Unauthenticated application access must be denied')
+          PY
