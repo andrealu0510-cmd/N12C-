@@ -37,11 +37,12 @@ button{width:100%;margin-top:18px;padding:12px;border:0;border-radius:9px;backgr
       <button id="loginBtn" type="submit">登入</button>
     </form>
     <div id="loading" class="loading">登入驗證中…</div>
-    <div class="note">登入後即可每天上傳 010103／010105／010508／010509。Excel 檔會透過本專案解析服務即時讀取，不保存原始檔案；固定網址可在手機與電腦開啟。</div>
-    <div class="small">北一二C 固定管理網頁</div>
+    <div class="note">登入後即可上傳010103／010105，店績、個人檢閱與附掛4項SPE總分同步更新。沿用原瀏覽器已保存的報表；010508／010509維持獨立保險資料。</div>
+    <div class="small">北一二C 固定管理網頁｜修正版 2026-10-07.1</div>
   </div>
 </div>
 
+<script src="./upgrade-v20261007.js?v=20261007-1"></script>
 <script>
 const API = "https://zgpuuliqtrpdjerniyio.supabase.co/functions/v1/n12c-kpi-api";
 const TOKEN_KEY = "n12c_fixed_token_v1";
@@ -64,7 +65,8 @@ function decodeB64Utf8(b64){
   return new TextDecoder("utf-8").decode(bytes);
 }
 function mountApp(b64){
-  const html = decodeB64Utf8(b64);
+  if(typeof window.n12cUpgradeHtml !== "function") throw new Error("修正版尚未載入，請按 Ctrl+F5 重新開啟；不需清除瀏覽器資料。");
+  const html = window.n12cUpgradeHtml(decodeB64Utf8(b64));
   document.open();
   document.write(html);
   document.close();
@@ -92,6 +94,7 @@ async function restore(){
   }catch(e){
     localStorage.removeItem(TOKEN_KEY);
     setLoading(false);
+    showError(e.message || "請重新登入");
   }
 }
 form.addEventListener("submit",async e=>{
