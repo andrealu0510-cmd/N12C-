@@ -1,15 +1,37 @@
 /* N12C daily-review patch. Application code only; no report rows or credentials. */
 (function () {
   'use strict';
-  const VERSION = '2026-10-07.1';
+  const VERSION = '2026-10-07.1'; // Keep the existing scoring rules unchanged.
+  const LOADER_VERSION = '2026-10-22.1';
   function upgradeHtml(input) {
     let html = String(input);
     const replaceOnce = (oldText, newText) => {
       if (!html.includes(oldText)) throw new Error('管理頁版本不符，已停止套用以避免錯算：' + oldText.slice(0, 36));
       html = html.replace(oldText, newText);
     };
-    replaceOnce('const ITEMS=["影音(HBO/D+/Prime)","Netflix","配件","包膜","保險","VK","天下/開通"];', 'const ITEMS=["配件","包膜","VK","天下/開通"];');
-    replaceOnce('function score(v){if(v==null)return 0;if(v<70)return-.2;if(v<100)return-.1;if(v>110)return .1;return 0;}', 'function score(v){if(v==null||!Number.isFinite(Number(v)))return null;if(v<100)return-.1;if(v>110)return .1;return 0;}');
+    // The API's v15 template has six items and no <70% tier. Accept only
+    // reviewed template variants; unknown schemas still fail closed.
+    const replaceKnown = (label, variants, replacement) => {
+      const matches = variants.filter(text => html.includes(text));
+      if (matches.length !== 1 || html.split(matches[0]).length !== 2) {
+        throw new Error('管理頁版本不符（' + label + '），已停止載入；報表未刪除。');
+      }
+      html = html.replace(matches[0], replacement);
+    };
+    const finalItems = 'const ITEMS=["配件","包膜","VK","天下/開通"];';
+    const finalScore = 'function score(v){if(v==null||!Number.isFinite(Number(v)))return null;if(v<100)return-.1;if(v>110)return .1;return 0;}';
+    replaceKnown('附掛欄位', [
+      'const ITEMS=["影音(HBO/D+/Prime)","Netflix","配件","包膜","保險","VK","天下/開通"];',
+      'const ITEMS=["影音(HBO/D+/Prime)","Netflix","配件","包膜","VK","天下/開通"];',
+      finalItems
+    ], finalItems);
+    replaceKnown('計分函式', [
+      'function score(v){if(v==null)return 0;if(v<70)return-.2;if(v<100)return-.1;if(v>110)return .1;return 0;}',
+      'function score(v){if(v==null)return 0;if(v<100)return-.1;if(v>110)return .1;return 0;}',
+      finalScore
+    ], finalScore);
+    html = html.replaceAll('附掛6項：影音｜Netflix｜配件｜包膜｜VK｜天下/開通', '附掛4項：配件｜包膜｜VK｜天下/開通');
+    html = html.replaceAll('附掛6項', '附掛4項');
     html = html.replace('rank:rateN(r[6])', 'rank:n(r[6])');
     // This undefined variable used to abort the review when any roster member was missing.
     html = html.replaceAll('.map(rec=>({rec:x,ev:null,missing:true}))', '.map(rec=>({rec,ev:null,missing:true}))');
@@ -238,4 +260,5 @@
   }
   window.n12cUpgradeHtml=upgradeHtml;
   window.n12cUpgradeVersion=VERSION;
+  window.n12cUpgradeLoaderVersion=LOADER_VERSION;
 })();
