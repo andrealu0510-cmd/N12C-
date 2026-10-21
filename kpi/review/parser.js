@@ -76,18 +76,26 @@ function decodeCell(s) {
   return { r: Number(m[2]) - 1, c: c - 1 };
 }
 function dimensions(ws) {
-  if (ws?.['!ref']) {
-    const parts = ws['!ref'].split(':');
-    const a = decodeCell(parts[0]), b = decodeCell(parts[1] || parts[0]);
-    if (a && b) return { rows: b.r + 1, cols: b.c + 1 };
-  }
+  // !ref frequently includes thousands of empty trailing TSV columns or Excel
+  // formatting-only cells. Scan actual content, including dense SheetJS rows.
   const dense = ws?.['!data'] || (Array.isArray(ws) ? ws : null);
-  if (dense) return { rows: dense.length, cols: Math.max(0, ...dense.map(r => r?.length || 0)) };
-  let rows = 0, cols = 0;
-  for (const k of Object.keys(ws || {})) {
-    const p = decodeCell(k); if (p) { rows = Math.max(rows, p.r + 1); cols = Math.max(cols, p.c + 1); }
+  let rows = 0, cols = 0; const rowColumns = new Map();
+  const accept = (r, c, cell) => {
+    if (!label(cell) && !(isCell(cell) && cell.f)) return;
+    rows = Math.max(rows, r + 1); cols = Math.max(cols, c + 1);
+    if (!rowColumns.has(r)) rowColumns.set(r, []);
+    rowColumns.get(r).push(c);
+  };
+  if (dense) {
+    for (const rk of Object.keys(dense)) {
+      if (!/^\d+$/.test(rk) || !dense[rk]) continue;
+      for (const ck of Object.keys(dense[rk])) if (/^\d+$/.test(ck)) accept(Number(rk), Number(ck), dense[rk][ck]);
+    }
+  } else for (const k of Object.keys(ws || {})) {
+    const p = decodeCell(k); if (p) accept(p.r, p.c, ws[k]);
   }
-  return { rows, cols };
+  for (const columns of rowColumns.values()) columns.sort((a, b) => a - b);
+  return { rows, cols, rowColumns, occupiedRows: [...rowColumns.keys()].sort((a, b) => a - b) };
 }
 function readCell(ws, r, c) {
   const dense = ws?.['!data'] || (Array.isArray(ws) ? ws : null);
@@ -101,9 +109,9 @@ function mergedCell(ws, r, c) {
 }
 function identityField(s) {
   const t = compact(s).replace(/[:：]/g, '');
-  if (/^(?:員編|員工編號|員工代碼|同仁員編|EMPLOYEEID|EMPID|工號)$/.test(t)) return 'employeeId';
-  if (/^(?:姓名|員工姓名|同仁姓名|EMPLOYEENAME|NAME)$/.test(t)) return 'name';
-  if (/^(?:門市|門市名稱|店點|店點名稱|店名|服務中心|營業店點名稱|營業點名稱|銷售店點名稱|STORE)$/.test(t)) return 'store';
+  if (/^(?:員編|員工編號|員工代碼|人員編號|人員代碼|同仁員編|同仁編號|EMPLOYEEID|EMPLOYEENO\.?|STAFFID|EMPID|工號)$/.test(t)) return 'employeeId';
+  if (/^(?:姓名|員工姓名|同仁姓名|人員姓名|EMPLOYEENAME|STAFFNAME|NAME)$/.test(t)) return 'name';
+  if (/^(?:門市|門市名稱|店點|店點名稱|店名|服務中心|服務中心名稱|營業店點名稱|營業點名稱|銷售店點名稱|STORE|STORENAME)$/.test(t)) return 'store';
   if (/^(?:職稱|店內職稱|職務|角色|ROLE|JOB)$/.test(t)) return 'job';
   if (/^(?:排名|個人排名|總排名|名次|RANK)$/.test(t)) return 'rank';
   return null;
@@ -141,7 +149,7 @@ function knownMetric(s) {
 }
 function genericGroup(s) {
   const t = compact(s);
-  if (!t || identityField(s) || overallField([s]) || valueField(s) || /^\d/.test(t)) return false;
+  if (!t || identityField(s) || overallField([s]) || valueField(s) || /^[\d.,%+\-/]+$/.test(t)) return false;
   if (/^(?:一般項目|加減分項目?|KPI|上線數KPI|進度達成率|基本資料|人員資料|備註|權重|績效)$/.test(t)) return false;
   if (/資料日期|截止日|報表日期|統計區間|報表名稱|提醒[:：]|註[:：]/.test(t) || t.length > 65) return false;
   return true;
@@ -149,10 +157,10 @@ function genericGroup(s) {
 function inferredUnit(source, fallback = '未確認') {
   const s = compact(source);
   if (/點數|點$|單位[:：]?點/.test(s)) return '點';
-  if (/營收|金額|收入|營業額|單位[:：]?元/.test(s)) return '元';
+  if (/營收|金額|面額|收入|營業額|單位[:：]?元/.test(s)) return '元';
   if (/台數|單位[:：]?台/.test(s)) return '台';
   if (/筆數|單位[:：]?筆/.test(s)) return '筆';
-  if (/件數|計件|銷售數|上線數|開通數|單位[:：]?件/.test(s)) return '件';
+  if (/件數|計件|銷售數|上線數|開通數|數$|量$|續約|單位[:：]?件/.test(s)) return '件';
   if (/率$|占比|佔比|比例|百分比/.test(s)) return '%';
   return fallback;
 }
@@ -170,14 +178,96 @@ function looksLikePerson(ws, r, mapping) {
   return !!id && !!name && !identityField(id) && !identityField(name) && !/小計|合計|總計|全區|平均/.test(id) && !/[\s%]/.test(id);
 }
 
+// The observed 01-01-05 export omits all A:H identity headings. Recover its
+// identity columns only after verifying independent structural signatures and
+// multiple employee-shaped rows. A title or a familiar column offset alone is
+// deliberately insufficient. The unknown column before rank is never used.
+function recognize010105(ws, size, options) {
+  if (options.profile === false) return null;
+  const titleRows = size.occupiedRows.filter(r => (size.rowColumns.get(r) || []).some(c => /^上線數KPI進度達成率$/.test(compact(readCell(ws, r, c)))));
+  if (!titleRows.length) return null;
+  for (const groupRow of size.occupiedRows) {
+    if (!titleRows.some(r => r < groupRow)) continue;
+    for (const rankColumn of size.rowColumns.get(groupRow) || []) {
+      if (rankColumn < 6 || identityField(readCell(ws, groupRow, rankColumn)) !== 'rank' || overallField([label(readCell(ws, groupRow, rankColumn + 1))]) !== 'overallProgress') continue;
+      for (let leafRow = groupRow + 1; leafRow <= Math.min(groupRow + 5, size.rows - 1); leafRow++) {
+        const blocks = [];
+        for (let c = rankColumn + 2; c + 3 < size.cols; c += 4) {
+          const fields = [0, 1, 2, 3].map(i => valueField(mergedCell(ws, leafRow, c + i)));
+          if (fields.join('|') !== 'actual|target|ignored|progress' || !/權重|WEIGHT/.test(compact(mergedCell(ws, leafRow, c + 2)))) break;
+          const caption = label(mergedCell(ws, groupRow, c));
+          if (!caption || valueField(caption) || identityField(caption) || /參考件數$/.test(caption)) break;
+          let section = '';
+          for (let r = Math.max(0, groupRow - 8); r < groupRow; r++) {
+            for (const cc of size.rowColumns.get(r) || []) {
+              if (cc > c) break;
+              const s = compact(readCell(ws, r, cc));
+              if (/^(?:一般項目|加減分項目)$/.test(s)) section = s;
+            }
+          }
+          blocks.push({ column: c, caption, section });
+        }
+        const anchorKeys = new Set(blocks.map(b => knownMetric(b.caption)?.key).filter(k => ['a999', 'r999', 'r1399'].includes(k)));
+        if (blocks.length < 4 || anchorKeys.size < 2) continue;
+        const identity = {
+          store: descriptor(rankColumn - 5, '門市（已驗證 01-01-05 結構）'),
+          job: descriptor(rankColumn - 4, '職稱（已驗證 01-01-05 結構）'),
+          employeeId: descriptor(rankColumn - 3, '員編（已驗證 01-01-05 結構）'),
+          name: descriptor(rankColumn - 2, '姓名（已驗證 01-01-05 結構）'),
+          rank: descriptor(rankColumn, '排名')
+        };
+        let firstData = null, valid = 0, invalid = 0; const ids = new Set();
+        for (const r of size.occupiedRows.filter(r => r > leafRow).slice(0, 24)) {
+          const get = c => label(mergedCell(ws, r, c));
+          const id = get(identity.employeeId.column), name = get(identity.name.column);
+          if (!id && !name) continue;
+          if (/^(?:合計|小計|總計|平均|全區)$/.test(id) || /^(?:合計|小計|總計|平均|全區)$/.test(name)) continue;
+          const storeCode = get(rankColumn - 6), store = get(identity.store.column), role = get(identity.job.column);
+          const validRow = /^[A-Z][A-Z0-9_-]{3,31}$/i.test(storeCode) && store.length >= 2 && !identityField(store)
+            && /店長|業務|專員|督導|儲備|服務|銷售|顧問|主任|經理/.test(role)
+            && /^[A-Z0-9][A-Z0-9._-]{3,31}$/i.test(id) && /\d/.test(id)
+            && name.length >= 2 && name.length <= 50 && !identityField(name) && !/^\d+$/.test(name);
+          if (validRow) { valid++; ids.add(id); firstData ??= r; } else invalid++;
+        }
+        if (valid < 3 || ids.size < 2 || invalid) continue;
+        const notes = [];
+        for (const r of size.occupiedRows.filter(r => r < groupRow)) for (const c of size.rowColumns.get(r) || []) {
+          const s = label(readCell(ws, r, c));
+          if (/預付卡|特維/.test(s) && /提醒|D\s*-\s*2|3\s*日|三日/i.test(s) && !notes.includes(s)) notes.push(s);
+        }
+        return {
+          groupRow, leafRow, dataStartRow: firstData, identity, blocks,
+          profile: { id: '01-01-05', label: '01-01-05 個人 KPI 報表', confidence: 'verified',
+            reasons: ['報表標題、排名及總進度欄相符', `${blocks.length} 組連續實際數／目標數／權重／進度達成率欄位`, `${valid} 列人員結構通過核對；保留英數員編`], notes }
+        };
+      }
+    }
+  }
+  return null;
+}
+
 function discoverHeader(ws, options, warnings) {
-  const size = dimensions(ws), scan = Math.min(size.rows, options.maxHeaderRows || 80), cols = Math.min(size.cols, 4096);
+  const size = dimensions(ws), scan = Math.min(size.rows, options.maxHeaderRows || size.rows), cols = size.cols;
+  const verified = recognize010105(ws, size, options);
+  if (verified && !Number.isInteger(options.headerStartRow) && !Number.isInteger(options.headerEndRow) && !Number.isInteger(options.dataStartRow)) {
+    const columns = Array.from({ length: cols }, (_, index) => ({ index, letter: colName(index), labels: [], label: colName(index) }));
+    for (const [field, d] of Object.entries(verified.identity)) columns[d.column] = { index: d.column, letter: colName(d.column), labels: [FIELD_LABELS[field]], label: FIELD_LABELS[field] };
+    const overallColumn = verified.identity.rank.column + 1;
+    columns[overallColumn] = { index: overallColumn, letter: colName(overallColumn), labels: ['總進度達成率'], label: '總進度達成率' };
+    for (const block of verified.blocks) for (let i = 0; i < 4; i++) {
+      const index = block.column + i, labels = [block.caption, label(mergedCell(ws, verified.leafRow, index))];
+      columns[index] = { index, letter: colName(index), labels, label: labels.join(' / ') };
+    }
+    return { startRow: verified.groupRow, endRow: verified.leafRow, dataStartRow: verified.dataStartRow, columns, identity: verified.identity, size, profile: verified.profile, profileBlocks: verified.blocks };
+  }
   let best = { score: -1, row: 0, fields: {} };
-  for (let r = 0; r < scan; r++) {
+  for (const r of size.occupiedRows.filter(r => r < scan)) {
     const fields = {};
     for (let c = 0; c < cols; c++) {
-      const field = identityField(label(mergedCell(ws, r, c)));
-      if (field && fields[field] == null) fields[field] = descriptor(c, label(mergedCell(ws, r, c)));
+      const current = label(mergedCell(ws, r, c));
+      const combined = r > 0 ? `${label(mergedCell(ws, r - 1, c))}${current}` : current;
+      const field = identityField(current) || identityField(combined);
+      if (field && fields[field] == null) fields[field] = descriptor(c, current);
     }
     const score = (fields.employeeId ? 5 : 0) + (fields.name ? 4 : 0) + (fields.store ? 3 : 0) + (fields.job ? 1 : 0);
     if (score > best.score) best = { score, row: r, fields };
@@ -187,10 +277,13 @@ function discoverHeader(ws, options, warnings) {
   let dataStart = options.dataStartRow;
   if (!Number.isInteger(dataStart)) {
     dataStart = -1;
-    for (let r = best.row + 1; r < Math.min(size.rows, best.row + 60); r++) if (looksLikePerson(ws, r, identity)) { dataStart = r; break; }
+    for (const r of size.occupiedRows.filter(r => r > best.row)) if (looksLikePerson(ws, r, identity)) { dataStart = r; break; }
     if (dataStart < 0) dataStart = Math.min(size.rows, best.row + 1);
   }
-  const start = Number.isInteger(options.headerStartRow) ? options.headerStartRow : Math.max(0, best.row - 5);
+  let automaticStart = best.row;
+  while (automaticStart > 0 && size.rowColumns.has(automaticStart - 1)) automaticStart--;
+  for (const merge of ws['!merges'] || []) if (merge.s.r < automaticStart && merge.e.r >= best.row && merge.s.c < cols) automaticStart = merge.s.r;
+  const start = Number.isInteger(options.headerStartRow) ? options.headerStartRow : automaticStart;
   const end = Number.isInteger(options.headerEndRow) ? options.headerEndRow : Math.max(start, dataStart - 1);
   const grid = [];
   for (let r = start; r <= end; r++) {
@@ -211,7 +304,7 @@ function discoverHeader(ws, options, warnings) {
     for (const row of grid) if (row[c] && !labels.includes(row[c])) labels.push(row[c]);
     return { index: c, letter: colName(c), labels, label: labels.join(' / ') || colName(c) };
   });
-  if (best.score < 9 && !options.mapping) addIssue(warnings, 'HEADER_NOT_FOUND', '未找到同時包含員編及姓名的表頭，請手動指定欄位與資料起始列。');
+  if (best.score < 9 && !options.mapping) addIssue(warnings, 'HEADER_NOT_FOUND', '未找到可確認的員編與姓名表頭，也未通過已知報表結構核對；請提供含完整表頭的原始報表。');
   return { startRow: start, endRow: end, dataStartRow: dataStart, columns, identity, size };
 }
 
@@ -425,8 +518,8 @@ function dateCellText(c, date1904) {
 }
 function detectDate(ws, header, options, workbook, warnings) {
   const rows = [];
-  for (let r = 0; r < Math.min(header.dataStartRow + 1, 80); r++) {
-    rows.push(Array.from({ length: header.size.cols }, (_, c) => dateCellText(readCell(ws, r, c), workbook?.Workbook?.WBProps?.date1904)).join(' '));
+  for (const r of header.size.occupiedRows.filter(r => r < header.dataStartRow)) {
+    rows.push((header.size.rowColumns.get(r) || []).map(c => dateCellText(readCell(ws, r, c), workbook?.Workbook?.WBProps?.date1904)).join(' '));
   }
   const text = normalizedDateText(rows.join('\n'));
   const ym = text.match(/\b(20\d{2})(0[1-9]|1[0-2])\b/);
@@ -465,6 +558,76 @@ function detectDate(ws, header, options, workbook, warnings) {
   return { detectedDate, dateInfo };
 }
 
+function prepareProfileDefinitions(header, mapping, definitions) {
+  if (!header.profile) return;
+  for (const def of definitions) {
+    const metric = mapping.metrics[def.key];
+    const block = header.profileBlocks.find(b => b.column === metric?.actual?.column);
+    if (!block) continue;
+    const caption = compact(block.caption);
+    // In this verified report these are numerator/denominator COUNTS. The
+    // progress cell contains the resulting ratio, not attainment of a target.
+    const ratio = block.section === '加減分項目' && /^RT[升降]轉率/.test(caption);
+    if (ratio || /^解約後NPOUT/.test(caption) || /^DS-AQNP$/.test(caption) || /^RT[升降]轉率.*(?:件數|轉數)/.test(caption)) def.unit = metric.unit = '件';
+    def.calculation = 'source-only';
+    if (ratio) { def.progressKind = 'ratio'; def.reminderEligible = false; }
+  }
+}
+
+function profileBasisEvidence(header, definitions, mapping, rows, dateInfo, warnings) {
+  if (!header.profile) return null;
+  const referenceKeys = ['a999', 'r999', 'r1399'];
+  const samplesFor = keys => {
+    const samples = [];
+    for (const [person, row] of rows.entries()) for (const key of keys) {
+      const m = row.metrics[key];
+      if (!m || !Number.isFinite(m.actual) || m.actual < 0 || !Number.isFinite(m.target) || m.target <= 0
+        || !Number.isFinite(m.progress) || m.progress <= 0 || m.progress >= 250) continue;
+      samples.push({ key, person, actual: m.actual, target: m.target, progress: m.progress });
+    }
+    return samples;
+  };
+  const summary = samples => ({ sampleCount: samples.length, metricCount: new Set(samples.map(s => s.key)).size, employeeCount: new Set(samples.map(s => s.person)).size });
+  const samples = samplesFor(referenceKeys), counts = summary(samples);
+  const evidence = { basis: 'unknown', ...counts, maxErrorPercentagePoints: null, reason: '' };
+  const reliableDate = dateInfo && !warnings.some(w => /INVALID_REPORT_DATE|AMBIGUOUS_REPORT_DATE|REPORT_DATE_MISMATCH/.test(w.code))
+    && (!dateInfo.period || dateInfo.period.start === `${dateInfo.month}-01`);
+  const prediction = (s, basis) => s.actual / s.target * 100 * (basis === 'month' ? dateInfo.daysInMonth / dateInfo.elapsedDays : 1);
+  const check = (observations, basis) => {
+    const errors = observations.map(s => Math.abs(prediction(s, basis) - s.progress));
+    return { matches: observations.length > 0 && observations.every((s, i) => errors[i] <= Math.max(0.15, Math.abs(s.progress) * 0.0005)), maxError: errors.length ? Math.max(...errors) : null };
+  };
+  if (!reliableDate) evidence.reason = '缺少可確認的整月起始區間或資料截止日，未推定目標基準。';
+  else if (counts.sampleCount < 3 || counts.metricCount < 2 || counts.employeeCount < 2) evidence.reason = '未取得至少 3 筆、跨 2 項 KPI 及 2 位人員的未封頂原表進度，未推定目標基準。';
+  else {
+    const monthly = check(samples, 'month'), toDate = check(samples, 'toDate');
+    if (monthly.matches !== toDate.matches) {
+      evidence.basis = monthly.matches ? 'month' : 'toDate';
+      evidence.maxErrorPercentagePoints = (monthly.matches ? monthly : toDate).maxError;
+      evidence.reason = `${counts.sampleCount} 筆 A999／R999／R1399 原表進度與${evidence.basis === 'month' ? '整月目標按資料日進度' : '截至資料日目標'}一致；已排除 0% 及 250% 封頂值。`;
+    } else evidence.reason = monthly.matches ? '整月及截至當日兩種基準均吻合，現有資料無法區分。' : '原表進度未一致吻合整月或截至當日基準，保留原值並請確認。';
+  }
+  for (const def of definitions) {
+    const metric = mapping.metrics[def.key], block = header.profileBlocks.find(b => b.column === metric?.actual?.column);
+    const values = rows.map(r => r.metrics[def.key]).filter(Boolean);
+    def.active = values.some(m => Number.isFinite(m.progress) || Number.isFinite(m.achievement) || (Number.isFinite(m.target) && m.target > 0));
+    def.reminderEligible = def.active && def.progressKind !== 'ratio';
+    const isReverseOrAdjustment = /自退|解約後\s*NP\s*OUT/i.test(def.sourceLabel) || block?.section === '加減分項目';
+    const metricSamples = samplesFor([def.key]);
+    const metricCounts = summary(metricSamples);
+    const linear = evidence.basis !== 'unknown' && def.unit !== '%' && !isReverseOrAdjustment
+      && metricCounts.sampleCount >= 3 && metricCounts.employeeCount >= 2 && check(metricSamples, evidence.basis).matches;
+    def.calculation = linear ? 'linear' : 'source-only';
+    def.targetBasis = linear ? evidence.basis : 'unknown';
+    metric.targetBasis = def.targetBasis;
+    if (linear) def.basisEvidence = { basis: evidence.basis, ...metricCounts, maxErrorPercentagePoints: check(metricSamples, evidence.basis).maxError };
+    for (const row of rows) if (row.metrics[def.key]) row.metrics[def.key].targetBasis = def.targetBasis;
+  }
+  header.profile.basisEvidence = evidence;
+  if (evidence.basis === 'unknown') addIssue(warnings, 'TARGET_BASIS_UNCONFIRMED', evidence.reason);
+  return evidence;
+}
+
 /** Parse one sheet. Mapping overrides are explicit and never depend on legacy column offsets. */
 export function parseSheet(workbook, sheetName, options = {}, XLSX) { // XLSX is optional by design.
   const ws = workbook?.Sheets?.[sheetName];
@@ -473,6 +636,7 @@ export function parseSheet(workbook, sheetName, options = {}, XLSX) { // XLSX is
   const header = discoverHeader(ws, options, warnings);
   const auto = discoverMapping(header, warnings);
   const { mapping, metricDefinitions } = applyMapping(auto, options, warnings);
+  prepareProfileDefinitions(header, mapping, metricDefinitions);
   // Once a user supplies an unambiguous override, remove the resolved warning.
   for (let i = warnings.length - 1; i >= 0; i--) {
     const w = warnings[i];
@@ -511,9 +675,10 @@ export function parseSheet(workbook, sheetName, options = {}, XLSX) { // XLSX is
   }
   const result = normalizeRows(mappedRows, { ...options, mapping });
   warnings.push(...result.warnings); errors.push(...result.errors);
+  const basisEvidence = profileBasisEvidence(header, metricDefinitions, mapping, result.rows, dateInfo, warnings);
   if (!result.rows.length && !errors.length) errors.push(issue('NO_PERSON_ROWS', '未找到可匯入的人員資料，請確認工作表、表頭與資料起始列。'));
   const publicHeader = { startRow: header.startRow, endRow: header.endRow, dataStartRow: header.dataStartRow, columns: header.columns };
-  return { ok: errors.length === 0, sheetName, header: publicHeader, mapping, mappingCandidates: auto.mappingCandidates, metricDefinitions, rows: result.rows, preview: result.rows.slice(0, options.previewLimit ?? 5), rowCount: result.rows.length, detectedDate, dateInfo, warnings, errors, duplicates: result.duplicates, requiresReview: errors.length > 0 || warnings.some(w => /AMBIGUOUS|MISSING|UNMAPPED|DATE_NOT_FOUND|UNKNOWN_UNIT/.test(w.code)) };
+  return { ok: errors.length === 0, sheetName, header: publicHeader, mapping, mappingCandidates: auto.mappingCandidates, metricDefinitions, rows: result.rows, preview: result.rows.slice(0, options.previewLimit ?? 5), rowCount: result.rows.length, detectedDate, dateInfo, profile: header.profile || null, basisEvidence, warnings, errors, duplicates: result.duplicates, requiresReview: errors.length > 0 || warnings.some(w => /AMBIGUOUS|MISSING|UNMAPPED|DATE_NOT_FOUND|UNKNOWN_UNIT|TARGET_BASIS_UNCONFIRMED/.test(w.code)) };
 }
 
 /** Inspect every worksheet, returning selectable candidate sheets plus safe previews. */

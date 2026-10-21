@@ -1,9 +1,11 @@
-// Entirely synthetic fixtures. Run with: node review-build/parser.test.mjs
+// Entirely synthetic fixtures. Run with: node tests/parser.test.js
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 
 const moduleText = await readFile(new URL('../parser.js', import.meta.url), 'utf8');
 const { inspectWorkbook, parseSheet, normalizeRows } = await import(`data:text/javascript;base64,${Buffer.from(moduleText).toString('base64')}`);
+const xlsxText = await readFile(new URL('../vendor/xlsx.full.min.js', import.meta.url), 'utf8');
+const XLSX = (await import(`data:text/javascript;base64,${Buffer.from(`${xlsxText}\nexport default XLSX;`).toString('base64')}`)).default;
 const colName = n => { let s = ''; for (n++; n > 0; n = Math.floor((n - 1) / 26)) s = String.fromCharCode(65 + (n - 1) % 26) + s; return s; };
 const pct = n => ({ t: 'n', v: n, w: `${n * 100}%`, z: '0.0%' });
 function workbook(rows, merges = []) {
@@ -146,6 +148,168 @@ test('percentage-unit metrics normalize actual and target, and invalid mapping b
   const invalid = parseSheet(workbook(rows, merges), '測試資料', { mapping: { employeeId: 9999 } });
   assert.equal(invalid.ok, false);
   assert.ok(invalid.errors.some(e => e.code === 'COLUMN_OUT_OF_RANGE'));
+});
+
+// Public report captions only; every person, store, ID and number below is fake.
+// This profile deliberately has NO identity headings in A:H, matching the
+// reported export shape. The reference tiers after the 46 groups are not KPIs.
+const profileCaptions = [
+  '5G銷售數', 'HBO Max&Disney+&Prime Video銷售數', 'Netflix多享組銷售數', 'TTL AQ上線點數', 'TTL AQ上線數',
+  '自退數', '解約後NP OUT', '解約後NP OUT(督導績)', 'DS-AQ NP', 'AQ V+D 999 (含)以上', 'AQ V+D 1399 (含)以上',
+  '預付卡開卡面額', 'RT上線點數', 'RT上線數', '特殊維繫用戶續約數', '高高特維用戶續約數', 'RT V+D 999 (含)以上', 'RT V+D 1399 (含)以上',
+  'Device專案銷售數', '重點Device銷售量', '好速案銷售點數', '換約淨新增金額', '空機、3C、物聯網及門市購營收', '配件及其他營收',
+  '包膜與保貼營收', '手機保險服務點數', 'MyVideo&KKBOX', 'MyVideo', 'KKBOX', 'Apple&Google服務及雜誌週刊開通數',
+  'RT升轉率升轉件數', 'RT升轉率上線件數', 'RT降轉率降轉件數', 'RT降轉率上線件數',
+  'RT升轉率_上線件數(前約 V+D 1399以下)', 'RT降轉率_上線件數(前約 V+D 1399(含)以上)',
+  'RT降轉率_降轉數(前約 V+D 1399(含)以上)', 'RT升轉率_升轉數(前約 V+D 1399以下)',
+  'RT降轉率_上線件數(前約 V+D 1399以下)', 'RT降轉率_降轉數(前約 V+D 1399以下)',
+  'RT升轉率(前約 V+D 1399以下)', 'RT降轉率(前約 V+D 1399以下)', 'RT降轉率(前約 V+D 1399(含)以上)',
+  'RT升轉率', 'RT降轉率', 'TTL AQ上線數_加分項'
+];
+const referenceGroups = new Set([4, 8, 13, ...Array.from({ length: 10 }, (_, i) => 30 + i)]);
+function profileFixture({ shiftedRows = 0, merged = true, wide = false } = {}) {
+  const r = Array.from({ length: shiftedRows + 13 }, () => []), off = shiftedRows;
+  r[off + 1][0] = '提醒：預付卡資料 D-2；高風險特維每月 3 日後才呈現。';
+  r[off + 2][0] = '上線數 KPI 進度達成率';
+  r[off + 4][0] = '202610'; r[off + 4][3] = '2026/10/01 ~ 10/20';
+  r[off + 6][10] = '一般項目'; r[off + 6][170] = '加減分項目';
+  r[off + 6][194] = 'CBG AQ上線點數參考件數'; r[off + 6][203] = 'RT上線點數參考件數';
+  r[off + 7][8] = '排名'; r[off + 7][9] = '總進度\n達成率';
+  const mergeList = [8, 9].map(c => ({ s: { r: off + 7, c }, e: { r: off + 8, c } }));
+  profileCaptions.forEach((caption, group) => {
+    const c = 10 + group * 4;
+    r[off + 7][c] = caption;
+    ['實際數', '目標數', '權重', '進度達成率'].forEach((s, i) => { r[off + 8][c + i] = s; });
+    mergeList.push({ s: { r: off + 7, c }, e: { r: off + 7, c: c + 3 } });
+  });
+  for (let c = 194; c <= 213; c++) { r[off + 8][c] = c - 194; }
+  for (let p = 0; p < 4; p++) {
+    const row = r[off + 9 + p];
+    ['假區', '測試區', `DEMO00${p % 2 + 1}`, `示範門市${p % 2 + 1}`, p === 0 ? '店長' : '業務代表', p === 1 ? '55U3002' : `DEMO00${p + 1}`, `假名${p + 1}`, 9999, 40 - p, pct(0.65 + p / 10)].forEach((v, c) => { row[c] = v; });
+    profileCaptions.forEach((caption, group) => {
+      const c = 10 + group * 4, actual = 2 + p + group % 5, target = 15 + group;
+      row[c] = actual; row[c + 1] = target; row[c + 2] = 7;
+      row[c + 3] = pct(Number((actual / target * 31 / 20).toFixed(5)));
+      if (referenceGroups.has(group)) { row[c + 1] = ''; row[c + 2] = 0; row[c + 3] = ''; }
+      if (group >= 40 && group < 45) { row[c + 1] = 40 + p; row[c + 3] = pct(Number((actual / (40 + p)).toFixed(5))); }
+      if (group === 20) row[c + 3] = pct(0.946 + p * 0.01); // rounded broadband values do not reconcile
+      if (group === 9 && p === 0) row[c + 3] = pct(2.5); // source cap must survive unchanged
+    });
+    for (let c = 194; c <= 213; c++) row[c] = p + c - 194;
+  }
+  if (wide) r[0][16342] = '';
+  return workbook(r, merged ? mergeList : []);
+}
+function xlsxRoundTrip(wb, dense) {
+  const bytes = XLSX.write(wb, { type: 'array', bookType: 'xlsx', compression: true });
+  return XLSX.read(bytes, { type: 'array', dense, cellNF: true, cellText: true, cellDates: true });
+}
+
+test('actual XLSX sparse and dense cells recover verified missing identity headings without manual mapping', () => {
+  for (const dense of [false, true]) {
+    const wb = xlsxRoundTrip(profileFixture({ wide: true }), dense);
+    const r = parseSheet(wb, '測試資料', {}, XLSX);
+    assert.equal(r.ok, true, JSON.stringify(r.errors));
+    assert.equal(r.rowCount, 4); assert.equal(r.metricDefinitions.length, 46);
+    assert.equal(r.header.columns.length, 214); assert.equal(r.profile?.id, '01-01-05');
+    assert.equal(r.detectedDate, '2026-10-20'); assert.equal(r.dateInfo.daysInMonth, 31);
+    assert.equal(r.mapping.employeeId.column, 5); assert.equal(r.mapping.name.column, 6);
+    assert.equal(r.mapping.store.column, 3); assert.equal(r.rows[0].rank, 40);
+    assert.equal(r.rows[1].employeeId, '55U3002');
+    assert.equal(r.rows[0].metrics.a999.progress, 250);
+    assert.equal(r.rows[0].metrics.a999.raw.progress.value, 2.5);
+    assert.equal(r.mapping.metrics.a999.gap, null);
+    assert.equal(r.profile.basisEvidence.basis, 'month');
+    assert.equal(r.profile.basisEvidence.sampleCount, 11);
+    assert.equal(r.profile.basisEvidence.metricCount, 3);
+    assert.ok(r.profile.notes[0].includes('D-2'));
+    assert.equal(r.warnings.length, 0);
+  }
+});
+
+test('actual BIFF8 XLS preserves the 214-column profile and original percentage values', () => {
+  const wb = profileFixture(); // BIFF8 supports at most 256 columns; omit fake trailing blanks.
+  const bytes = XLSX.write(wb, { type: 'array', bookType: 'biff8' });
+  const readBack = XLSX.read(bytes, { type: 'array', cellNF: true, cellText: true, dense: false });
+  const r = parseSheet(readBack, '測試資料', {}, XLSX);
+  assert.equal(r.ok, true, JSON.stringify(r.errors));
+  assert.equal(r.rowCount, 4); assert.equal(r.metricDefinitions.length, 46);
+  assert.equal(r.header.columns.length, 214); assert.equal(r.profile?.id, '01-01-05');
+  assert.equal(r.detectedDate, '2026-10-20'); assert.equal(r.basisEvidence.basis, 'month');
+  assert.equal(r.rows[1].employeeId, '55U3002');
+  assert.equal(r.rows[0].metrics.a999.progress, 250);
+  assert.equal(r.rows[0].metrics.a999.raw.progress.value, 2.5);
+  assert.equal(r.metricDefinitions.filter(d => d.progressKind === 'ratio').length, 5);
+  assert.equal(r.warnings.length, 0);
+});
+
+test('reference groups and ratio numerators remain distinct, selectable source items with safe flags', () => {
+  const r = parseSheet(profileFixture({ merged: false }), '測試資料');
+  assert.equal(r.metricDefinitions.length, 46);
+  assert.equal(new Set(r.metricDefinitions.map(d => d.key)).size, 46);
+  assert.equal(r.metricDefinitions.filter(d => !d.active).length, 13);
+  assert.equal(r.metricDefinitions.filter(d => d.reminderEligible === false).length, 18);
+  const ratios = r.metricDefinitions.filter(d => d.progressKind === 'ratio');
+  assert.equal(ratios.length, 5);
+  for (const d of ratios) {
+    assert.equal(d.unit, '件'); assert.equal(d.calculation, 'source-only'); assert.equal(d.reminderEligible, false);
+    assert.equal(r.rows[0].metrics[d.key].target, 40);
+    assert.ok(r.rows[0].metrics[d.key].progress > 0);
+  }
+  const broadband = r.metricDefinitions.find(d => d.key === 'broadband');
+  assert.equal(broadband.calculation, 'source-only'); assert.equal(broadband.reminderEligible, true);
+  assert.equal(r.rows[0].metrics.broadband.progress, 94.6);
+  assert.equal(r.metricDefinitions.find(d => d.sourceLabel === '自退數').calculation, 'source-only');
+  assert.equal(r.metricDefinitions.find(d => d.sourceLabel === 'TTL AQ上線數_加分項').calculation, 'source-only');
+  assert.equal(r.metricDefinitions.filter(d => /MyVideo|KKBOX/.test(d.sourceLabel)).length, 3);
+  assert.equal(r.metricDefinitions.find(d => d.sourceLabel === '預付卡開卡面額').unit, '元');
+  assert.equal(r.metricDefinitions.find(d => d.sourceLabel === '5G銷售數').unit, '件');
+  assert.ok(!r.metricDefinitions.some(d => /參考件數$/.test(d.sourceLabel)));
+});
+
+test('profile requires structural and multiple-row evidence, and basis disagreement never guesses', () => {
+  const mismatch = profileFixture();
+  mismatch.Sheets['測試資料'].AX11 = pct(1.42); // A999 original progress conflicts with both supported bases
+  const r = parseSheet(mismatch, '測試資料');
+  assert.equal(r.ok, true); assert.equal(r.basisEvidence.basis, 'unknown');
+  assert.ok(r.warnings.some(w => w.code === 'TARGET_BASIS_UNCONFIRMED'));
+  assert.ok(r.metricDefinitions.every(d => d.calculation === 'source-only'));
+  const falseSignature = profileFixture();
+  falseSignature.Sheets['測試資料'].F10 = { t: 's', v: 'not a valid ID' };
+  const invalid = parseSheet(falseSignature, '測試資料');
+  assert.equal(invalid.profile, null); assert.equal(invalid.ok, false);
+  assert.ok(invalid.errors.some(e => e.code === 'MISSING_COLUMN'));
+  const missingDate = profileFixture(); delete missingDate.Sheets['測試資料'].D5;
+  const undated = parseSheet(missingDate, '測試資料');
+  assert.equal(undated.detectedDate, null); assert.equal(undated.basisEvidence.basis, 'unknown');
+  assert.ok(undated.warnings.some(w => w.code === 'DATE_NOT_FOUND'));
+});
+
+test('deep headers, old dense arrays and current !data dense sheets do not depend on first 80 rows', () => {
+  const wb = xlsxRoundTrip(profileFixture({ shiftedRows: 120 }), true);
+  const r = parseSheet(wb, '測試資料');
+  assert.equal(r.rowCount, 4); assert.equal(r.header.dataStartRow, 129); assert.equal(r.detectedDate, '2026-10-20');
+  const original = wb.Sheets['測試資料'];
+  const data = original['!data'] || original;
+  wb.Sheets['測試資料'] = { '!data': data, '!ref': original['!ref'], '!merges': original['!merges'] };
+  const modern = parseSheet(wb, '測試資料');
+  assert.equal(modern.rowCount, 4); assert.equal(modern.metricDefinitions.length, 46);
+});
+
+test('deep generic merged groups and split identity aliases are recognized without a profile', () => {
+  const deepRows = Array.from({ length: 132 }, () => []);
+  deepRows[120] = ['資料截止日', '2026/10/21'];
+  deepRows[121][5] = 'AQ V+D 999 (含)以上';
+  deepRows[129] = ['人員編號', '人員姓名', '服務中心名稱', '名次', '總進度達成率'];
+  deepRows[130] = ['', '', '', '', '', '實際數', '月目標', '權重', '進度達成率'];
+  deepRows[131] = ['DEMO901', '測試甲', '示範門市', 7, pct(0.9), 6, 10, 5, pct(0.86)];
+  const deepMerges = [{ s: { r: 121, c: 5 }, e: { r: 129, c: 8 } }, ...[0, 1, 2, 3, 4].map(c => ({ s: { r: 129, c }, e: { r: 130, c } }))];
+  const r = parseSheet(xlsxRoundTrip(workbook(deepRows, deepMerges), false), '測試資料');
+  assert.equal(r.ok, true, JSON.stringify(r.errors)); assert.equal(r.profile, null);
+  assert.equal(r.rows[0].metrics.a999.target, 10); assert.equal(r.rows[0].metrics.a999.progress, 86);
+  assert.equal(r.detectedDate, '2026-10-21');
+  const split = parseSheet(workbook([['員工', '員工', '門市', '總進度達成率'], ['編號', '姓名', '名稱'], ['DEMO902', '測試乙', '示範門市', '83%']]), '測試資料');
+  assert.equal(split.ok, true); assert.equal(split.rows[0].employeeId, 'DEMO902');
 });
 
 process.stdout.write(`\n${completed} synthetic fixture tests passed.\n`);

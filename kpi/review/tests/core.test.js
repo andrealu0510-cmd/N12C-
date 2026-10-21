@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {
   period, validDate, metricValue, needsReport, sortPeople, validateSnapshot,
 } from '../core.js';
+import { renderReportPrint } from '../report-ui.js';
 
 // All identities, stores, counts and rates in this file are synthetic.
 const approximate = (actual, expected, message = '') => {
@@ -87,6 +88,85 @@ test('unknown target basis does not invent expected amount, achievement, progres
   assert.equal(original.achievement, 48);
   assert.equal(original.expected, null);
   assert.equal(original.gap, null);
+});
+
+test('source-only self-cancellation and NP scores retain original percentages without linear calculations', () => {
+  for (const flagAt of ['definition', 'metric']) {
+    const def = definition({ label: flagAt === 'definition' ? '測試自退數' : '測試解約後NP OUT', ...(flagAt === 'definition' ? { calculation: 'source-only' } : {}) });
+    const row = employee({ actual: 10, target: 20, progress: 125, expected: 999, gap: 888, ...(flagAt === 'metric' ? { calculation: 'source-only' } : {}) });
+    const before = JSON.stringify(row);
+    const result = metricValue(row, def, '2026-10-20');
+    assert.equal(result.actual, 10); assert.equal(result.target, 20);
+    assert.equal(result.progress, 125); assert.equal(result.achievement, null);
+    assert.equal(result.expected, null); assert.equal(result.gap, null);
+    assert.equal(result.calculation, 'source-only'); assert.equal(result.progressSource, '原報表');
+    assert.equal(result.active, true); assert.equal(result.reminderEligible, true);
+    assert.equal(JSON.stringify(row), before);
+    row.metrics.a999.achievement = 112;
+    assert.equal(metricValue(row, def, '2026-10-20').achievement, 112, 'only an original monthly percentage is retained');
+  }
+});
+
+test('source-only metrics never fill missing source scores, and retain explicit zero scores', () => {
+  const def = definition({ calculation: 'source-only' });
+  const missing = metricValue(employee({ actual: 10, target: 20 }), def, '2026-10-20');
+  for (const field of ['progress', 'achievement', 'expected', 'gap']) assert.equal(missing[field], null, field);
+  assert.equal(missing.active, false);
+  const originalZero = metricValue(employee({ actual: 0, target: 0, progress: 0, achievement: 0 }), def, '2026-10-20');
+  assert.equal(originalZero.progress, 0); assert.equal(originalZero.achievement, 0);
+  assert.equal(originalZero.expected, null); assert.equal(originalZero.gap, null);
+});
+
+test('reference counts with no targets or source percentages remain visible without a reporting obligation', () => {
+  const row = employee({ actual: 12, target: null, progress: null, achievement: null });
+  const result = metricValue(row, definition({ label: '測試參考上線件數' }), '2026-10-20');
+  assert.equal(result.actual, 12); assert.equal(result.target, null);
+  assert.equal(result.active, false); assert.equal(result.expected, null); assert.equal(result.gap, null);
+  for (const rule of ['overall_and_metric', 'metric_and_achievement']) assert.equal(needsReport(row, reviewSnapshot(), ['a999'], rule), false);
+});
+
+test('upgrade and downgrade reference proportions do not enter either reporting threshold rule', () => {
+  const ref = definition({ key: 'upgrade_rate', label: '測試RT升轉率', unit: '件', calculation: 'source-only', reminderEligible: false });
+  const row = employee({}, { metrics: {
+    upgrade_rate: { actual: 12, target: 40, progress: 30, achievement: 30 },
+    a999: { actual: null, target: null, progress: 70, achievement: 60 },
+  } });
+  const snap = reviewSnapshot([ref, definition()]);
+  const result = metricValue(row, ref, snap.cutoffDate);
+  assert.equal(result.actual, 12); assert.equal(result.target, 40); assert.equal(result.unit, '件');
+  assert.equal(result.progress, 30); assert.equal(result.reminderEligible, false);
+  for (const rule of ['overall_and_metric', 'metric_and_achievement']) {
+    assert.equal(needsReport(row, snap, ['upgrade_rate'], rule), false, rule);
+    assert.equal(needsReport(row, snap, ['upgrade_rate', 'a999'], rule), true, 'ordinary eligible KPI still participates');
+  }
+});
+
+test('report KPI table labels source-only calculations and reference proportions without filling a gap', () => {
+  const def = definition({ key: 'upgrade_rate', label: '測試RT升轉率', unit: '件', calculation: 'source-only', progressKind: 'ratio', reminderEligible: false });
+  const row = employee({}, { metrics: { upgrade_rate: { actual: 12, target: 40, progress: 30, expected: 999, gap: 888 } } });
+  const snap = { ...reviewSnapshot([def]), id: 'synthetic-test-snapshot', selectedMetricKeys: ['upgrade_rate'] };
+  const html = renderReportPrint({ employee: row, snapshot: snap });
+  const table = html.match(/<table class="rf-kpi-table rf-print-table">[\s\S]*?<\/table>/)?.[0];
+  assert.ok(table, 'rendered KPI table exists');
+  assert.equal((table.match(/依原表/g) || []).length, 2);
+  assert.ok(table.includes('原表比例／僅供參考')); assert.ok(table.includes('30%'));
+  assert.ok(table.includes('40<br><small>分母件數</small>'));
+  assert.ok(table.includes('12<br><small>分子件數</small>'));
+  assert.equal(table.includes('待確認'), false);
+  assert.equal(table.includes('rf-negative'), false, 'a reference proportion is not styled as a low achievement');
+  assert.equal(/>999<|>888</.test(table), false, 'stale derived amounts are not displayed');
+});
+
+test('reference count rows are identified without being mislabeled as proportions', () => {
+  const def = definition({ key: 'reference_count', label: '測試RT升轉率升轉件數', unit: '件', calculation: 'source-only', reminderEligible: false });
+  const row = employee({}, { metrics: { reference_count: { actual: 12, target: null, progress: null } } });
+  const snap = { ...reviewSnapshot([def]), id: 'synthetic-test-snapshot', selectedMetricKeys: ['reference_count'] };
+  const html = renderReportPrint({ employee: row, snapshot: snap });
+  const table = html.match(/<table class="rf-kpi-table rf-print-table">[\s\S]*?<\/table>/)?.[0];
+  assert.ok(table, 'rendered KPI table exists');
+  assert.ok(table.includes('<small>僅供參考</small>'));
+  for (const wrong of ['原表比例', '分子件數', '分母件數']) assert.equal(table.includes(wrong), false, wrong);
+  assert.ok(table.includes('<td>12</td>'));
 });
 
 test('zero target is not applicable and does not create infinity or a reporting obligation', () => {

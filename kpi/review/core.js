@@ -6,8 +6,26 @@ export const finite=v=>typeof v==='number'&&Number.isFinite(v);
 export function taipeiDate(){return new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Taipei',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());}
 export function validDate(s){if(!/^\d{4}-\d{2}-\d{2}$/.test(s||''))return false;const d=new Date(s+'T00:00:00Z');return Number.isFinite(d.valueOf())&&d.toISOString().slice(0,10)===s;}
 export function period(date){if(!validDate(date))return null;const [year,month,day]=date.split('-').map(Number);const days=new Date(Date.UTC(year,month,0)).getUTCDate();return{year,month,day,days,fraction:day/days};}
-export function metricValue(employee,definition,date){const raw=employee.metrics?.[definition.key]||{};const p=period(date);const actual=finite(raw.actual)?raw.actual:null;const target=finite(raw.target)?raw.target:null;const unit=definition.unit||raw.unit||'未確認';const ratio=/[%％]|搭售率|占比|比例/.test(unit+' '+definition.label)||definition.kind==='ratio';const basis=raw.targetBasis||definition.targetBasis||'unknown';const monthly=['monthly','month'].includes(basis);const toDate=['toDate','todate','to-date'].includes(basis);const active=target!==null?target>0:(finite(raw.progress)||finite(raw.achievement));const achievement=active?(finite(raw.achievement)?raw.achievement:actual!==null&&target>0&&(monthly||ratio)?actual/target*100:null):null;const expected=target!==null?(ratio?target:toDate?target:monthly&&p?target*p.fraction:null):null;const progress=active?(finite(raw.progress)?raw.progress:actual!==null&&expected>0?actual/expected*100:null):null;const gap=active?(expected!==null&&actual!==null?expected-actual:null):null;return{...raw,actual,target,unit,targetBasis:basis,active,achievement,progress,expected,gap,progressSource:finite(raw.progress)?'原報表':'依已確認目標基準換算'};}
-export function needsReport(employee,snapshot,keys,rule='overall_and_metric'){const values=(snapshot.metricDefinitions||[]).filter(d=>keys.includes(d.key)).map(d=>metricValue(employee,d,snapshot.cutoffDate)).filter(v=>v.active);if(rule==='metric_and_achievement')return values.some(v=>finite(v.progress)&&v.progress<100&&finite(v.achievement)&&v.achievement<80);return finite(employee.overallProgress)&&employee.overallProgress<100&&values.some(v=>finite(v.progress)&&v.progress<80);}
+export function metricValue(employee,definition,date){
+ const raw=employee.metrics?.[definition.key]||{};const p=period(date);
+ const actual=finite(raw.actual)?raw.actual:null;const target=finite(raw.target)?raw.target:null;
+ const unit=definition.unit||raw.unit||'未確認';const basis=raw.targetBasis||definition.targetBasis||'unknown';
+ // Inverse, scored and source-specific KPIs cannot use the ordinary sales formula.
+ // Keep their supplied percentages without inventing a due amount or deficit.
+ if(raw.calculation==='source-only'||definition.calculation==='source-only'){
+  const progress=finite(raw.progress)?raw.progress:null;const achievement=finite(raw.achievement)?raw.achievement:null;
+  return{...raw,actual,target,unit,targetBasis:basis,calculation:'source-only',reminderEligible:definition.reminderEligible!==false,active:progress!==null||achievement!==null,achievement,progress,expected:null,gap:null,progressSource:progress!==null?'原報表':'原表未提供'};
+ }
+ const ratio=/[%％]|搭售率|占比|比例/.test(unit+' '+definition.label)||definition.kind==='ratio';
+ const monthly=['monthly','month'].includes(basis);const toDate=['toDate','todate','to-date'].includes(basis);
+ const active=target!==null?target>0:(finite(raw.progress)||finite(raw.achievement));
+ const achievement=active?(finite(raw.achievement)?raw.achievement:actual!==null&&target>0&&(monthly||ratio)?actual/target*100:null):null;
+ const expected=target!==null?(ratio?target:toDate?target:monthly&&p?target*p.fraction:null):null;
+ const progress=active?(finite(raw.progress)?raw.progress:actual!==null&&expected>0?actual/expected*100:null):null;
+ const gap=active?(expected!==null&&actual!==null?expected-actual:null):null;
+ return{...raw,actual,target,unit,targetBasis:basis,reminderEligible:definition.reminderEligible!==false,active,achievement,progress,expected,gap,progressSource:finite(raw.progress)?'原報表':'依已確認目標基準換算'};
+}
+export function needsReport(employee,snapshot,keys,rule='overall_and_metric'){const values=(snapshot.metricDefinitions||[]).filter(d=>keys.includes(d.key)).map(d=>metricValue(employee,d,snapshot.cutoffDate)).filter(v=>v.active&&v.reminderEligible);if(rule==='metric_and_achievement')return values.some(v=>finite(v.progress)&&v.progress<100&&finite(v.achievement)&&v.achievement<80);return finite(employee.overallProgress)&&employee.overallProgress<100&&values.some(v=>finite(v.progress)&&v.progress<80);}
 export function numeric(v,digits=1){if(!finite(v))return '—';return new Intl.NumberFormat('zh-TW',{maximumFractionDigits:digits}).format(v);}
 export const percent=v=>finite(v)?numeric(v,1)+'%':'—';
 export function statusClass(v){return !finite(v)?'muted':v<80?'danger':v<100?'warning':'good';}
