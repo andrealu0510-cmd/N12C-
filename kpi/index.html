@@ -19,6 +19,7 @@ button{width:100%;margin-top:18px;padding:12px;border:0;border-radius:9px;backgr
 .note{font-size:12px;color:var(--muted);margin-top:12px;line-height:1.55}
 .loading{display:none;text-align:center;padding:10px;font-weight:850;color:var(--blue)}
 .small{font-size:11px;color:#858b98;text-align:center;margin-top:8px}
+#resetLogin{background:#eef1f6;color:var(--blue);font-size:13px;margin-top:12px}button:disabled{opacity:.55;cursor:wait}
 </style>
 </head>
 <body>
@@ -28,94 +29,129 @@ button{width:100%;margin-top:18px;padding:12px;border:0;border-radius:9px;backgr
     <h1>每日管理檢閱</h1>
   </div>
   <div class="body">
-    <div id="err" class="err"></div>
+    <div id="err" class="err" role="status" aria-live="polite"></div>
     <form id="loginForm">
-      <label>登入帳號</label>
+      <label for="username">登入帳號</label>
       <input id="username" autocomplete="username" inputmode="numeric" required autofocus>
-      <label>登入密碼</label>
+      <label for="password">登入密碼</label>
       <input id="password" type="password" autocomplete="current-password" required>
       <button id="loginBtn" type="submit">登入</button>
     </form>
-    <div id="loading" class="loading">登入驗證中…</div>
+    <div id="loading" class="loading" role="status" aria-live="polite">登入驗證中…</div>
+    <button id="resetLogin" type="button">重設登入狀態（不刪報表）</button>
     <div class="note">登入後即可上傳010103／010105，店績、個人檢閱與附掛4項SPE總分同步更新。沿用原瀏覽器已保存的報表；010508／010509維持獨立保險資料。</div>
     <div class="note"><a href="./review/" style="color:var(--blue);font-weight:800">開啟新版：每日 KPI 提醒與隱碼逐筆回報 →</a></div>
-    <div class="small">北一二C 固定管理網頁｜修正版 2026-10-07.1</div>
+    <div class="small">北一二C 固定管理網頁｜登入修正版 2026-10-22.1</div>
   </div>
 </div>
 
-<script src="./upgrade-v20261007.js?v=20261007-1"></script>
+<script src="./upgrade-v20261007.js?v=20261022-1"></script>
 <script>
+(function(){
+'use strict';
 const API = "https://zgpuuliqtrpdjerniyio.supabase.co/functions/v1/n12c-kpi-api";
 const TOKEN_KEY = "n12c_fixed_token_v1";
+const LOGIN_VERSION = "2026-10-22.1";
 const err = document.getElementById("err");
 const form = document.getElementById("loginForm");
 const loading = document.getElementById("loading");
+const resetBtn = document.getElementById("resetLogin");
+let busy = false;
 
 function showError(msg){
   err.textContent = msg;
   err.style.display = "block";
 }
 function setLoading(on){
+  busy = on;
   form.style.display = on ? "none" : "block";
   loading.style.display = on ? "block" : "none";
+  resetBtn.disabled = on;
 }
-function decodeB64Utf8(b64){
-  const raw = atob(b64);
-  const bytes = new Uint8Array(raw.length);
-  for(let i=0;i<raw.length;i++) bytes[i]=raw.charCodeAt(i);
-  return new TextDecoder("utf-8").decode(bytes);
+function readToken(){
+  try{return localStorage.getItem(TOKEN_KEY);}
+  catch(e){throw new Error("瀏覽器未允許網站儲存登入狀態。請允許此網站儲存資料後重試，不必清除報表。");}
 }
-function mountApp(b64){
-  if(typeof window.n12cUpgradeHtml !== "function") throw new Error("修正版尚未載入，請按 Ctrl+F5 重新開啟；不需清除瀏覽器資料。");
-  const html = window.n12cUpgradeHtml(decodeB64Utf8(b64));
+function forgetToken(){
+  // Remove only this site's login token. Never clear report/history keys.
+  try{localStorage.removeItem(TOKEN_KEY);}
+  catch(e){throw new Error("無法重設登入狀態，請確認瀏覽器允許此網站儲存資料。");}
+}
+function prepareApp(b64){
+  if(typeof window.n12cUpgradeHtml !== "function" || window.n12cUpgradeLoaderVersion !== LOGIN_VERSION){
+    throw new Error("登入頁更新檔尚未載入。請按 Ctrl+F5 重新整理；不需清除瀏覽器資料。");
+  }
+  if(typeof b64 !== "string" || !b64)throw new Error("驗證服務未傳回管理頁，請稍後重試。");
+  let html;
+  try{
+    const raw=atob(b64);
+    html=new TextDecoder("utf-8",{fatal:true}).decode(Uint8Array.from(raw,c=>c.charCodeAt(0)));
+  }catch(e){throw new Error("管理頁資料格式異常，請稍後重試；原報表未變更。");}
+  try{return window.n12cUpgradeHtml(html);}
+  catch(e){throw new Error("帳號驗證已通過，但管理頁載入失敗："+(e.message||"版本不相容")+" 請保留此訊息回報，不必更改密碼或刪除報表。");}
+}
+function mountApp(html){
   document.open();
   document.write(html);
   document.close();
 }
 async function callApi(payload){
-  const r = await fetch(API,{
-    method:"POST",
-    headers:{"Content-Type":"application/json"},
-    body:JSON.stringify(payload),
-    mode:"cors",
-    cache:"no-store"
-  });
-  let data;
-  try{ data = await r.json(); }catch(e){ throw new Error("伺服器回應格式異常"); }
-  if(!r.ok || !data.ok) throw new Error(data.error || "登入失敗");
-  return data;
+  const controller=new AbortController();
+  const timer=setTimeout(()=>controller.abort(),25000);
+  try{
+    const r=await fetch(API,{
+      method:"POST",headers:{"Content-Type":"application/json"},
+      body:JSON.stringify(payload),mode:"cors",cache:"no-store",signal:controller.signal
+    });
+    let data;
+    try{data=await r.json();}catch(e){throw new Error("驗證服務回應格式異常（HTTP "+r.status+"），請稍後重試。");}
+    if(!r.ok || data?.ok !== true){
+      const failure=new Error(data?.error || "登入驗證失敗（HTTP "+r.status+"）");
+      failure.status=r.status;throw failure;
+    }
+    return data;
+  }catch(e){
+    if(e.name==="AbortError")throw new Error("登入連線逾時，請確認網路後重試；帳密與報表未變更。");
+    if(e instanceof TypeError)throw new Error("無法連上登入驗證服務，請確認網路或公司網路限制後重試。");
+    throw e;
+  }finally{clearTimeout(timer);}
 }
 async function restore(){
-  const token = localStorage.getItem(TOKEN_KEY);
-  if(!token) return;
+  let token;
+  try{token=readToken();}catch(e){showError(e.message);return;}
+  if(!token)return;
   setLoading(true);
   try{
-    const data = await callApi({action:"app",token});
-    mountApp(data.app_b64);
+    const data=await callApi({action:"app",token});
+    mountApp(prepareApp(data.app_b64));
   }catch(e){
-    localStorage.removeItem(TOKEN_KEY);
-    setLoading(false);
-    showError(e.message || "請重新登入");
+    // A template/network failure does not imply the account or session is invalid.
+    if(e.status===401){try{forgetToken();}catch(ignore){}}
+    setLoading(false);showError(e.message||"請重新登入");
   }
 }
 form.addEventListener("submit",async e=>{
-  e.preventDefault();
-  err.style.display="none";
-  setLoading(true);
+  e.preventDefault();if(busy)return;
+  err.style.display="none";setLoading(true);
   try{
-    const data = await callApi({
-      action:"login",
-      username:document.getElementById("username").value.trim(),
+    const data=await callApi({
+      action:"login",username:document.getElementById("username").value.trim(),
       password:document.getElementById("password").value
     });
-    localStorage.setItem(TOKEN_KEY,data.token);
-    mountApp(data.app_b64);
-  }catch(e){
-    setLoading(false);
-    showError(e.message || "無法登入");
-  }
+    if(typeof data.token!=="string" || !data.token)throw new Error("驗證服務未傳回登入狀態，請稍後重試。");
+    const html=prepareApp(data.app_b64);
+    try{localStorage.setItem(TOKEN_KEY,data.token);}
+    catch(e){throw new Error("瀏覽器無法保存登入狀態。請允許此網站儲存資料後重試，不必清除報表。");}
+    mountApp(html);
+  }catch(e){setLoading(false);showError(e.message||"無法登入");}
+});
+resetBtn.addEventListener("click",()=>{
+  if(busy)return;
+  try{forgetToken();showError("已重設登入狀態，請重新輸入帳密；已上傳的報表與歷史紀錄均保留。");document.getElementById("username").focus();}
+  catch(e){showError(e.message);}
 });
 restore();
+})();
 </script>
 </body>
 </html>
