@@ -7,7 +7,7 @@ const sessions=createSessionStore({sessionStorage:()=>window.sessionStorage,loca
 const $=id=>document.getElementById(id);
 const activeToken=()=>{try{return sessionStorage.getItem(SESSION_KEY);}catch{return null;}};
 sessions.restore();
-await import('./app.js?v=20261022-login-null-reset-fix');
+await import('./app.js?v=20261022-import-threshold-fix');
 
 // Keep the proven parser, validation and server authorization unchanged. This
 // small entry module adapts their UI lifecycle; the server still verifies access.
