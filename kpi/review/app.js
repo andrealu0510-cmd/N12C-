@@ -28,7 +28,8 @@ function pageRows(){const rows=currentRows();const pages=Math.max(1,Math.ceil(ro
 function metricOptions(){return defs().map(d=>'<option value="'+esc(d.key)+'">'+esc(d.label)+(d.reminderEligible===false?'（參考）':'')+'</option>').join('');}
 function syncMode(){
  const authenticated=state.mode!=='demo';
- $('sessionLabel').textContent=authenticated?(state.user?.role==='admin'?'主管已登入':'個人填報 · '+state.user?.employeeId):'操作示範';
+ $('sessionLabel').textContent=authenticated?(state.user?.role==='admin'?'主管已登入':'同仁 · '+state.user?.employeeId):'操作示範';
+ const staff=state.user?.role==='staff';$('confirmReadBox').hidden=!staff||!state.snapshot?.id;$('changePasswordOpen').hidden=!staff;
  $('sessionLabel').classList.toggle('online',authenticated);$('loginOpen').hidden=authenticated;$('logout').hidden=!authenticated;
  $('modeNotice').hidden=authenticated;
  $('uploadStrip').hidden=state.user?.role==='staff';
@@ -64,8 +65,8 @@ function tableMarkup(rows,definitions,exporting=false){
 function renderDashboard(){const page=pageRows();renderSummary();$('dashboardTable').innerHTML=tableMarkup(page.rows,selectedDefs());$('pageInfo').textContent=state.page+' / '+page.pages+' 頁 · '+page.total+' 人';$('prevPage').disabled=state.page<=1;$('nextPage').disabled=state.page>=page.pages;$('captureDashboard').disabled=!page.rows.length||!state.keys.length;$('printDashboard').disabled=!page.rows.length||!state.keys.length;$('sourceInfo').textContent='截止日 '+(state.snapshot.cutoffDate||'未確認')+' · '+state.snapshot.sourceName+(state.snapshot.rows.length&&!state.snapshot.rows.some(e=>finite(e.rank))?' · 原表排名未辨識':'');$('rule').value=state.rule;}
 function render(){syncMode();renderPeriod();renderMetrics();renderDashboard();}
 function changeSelection(keys){state.keys=[...new Set(keys)].filter(k=>defs().some(d=>d.key===k));state.page=1;prefs.selected=state.keys;persistPrefs();renderMetrics();renderDashboard();if(state.tab==='reports'&&!state.dirty)populatePeople();}
-async function bootstrap(){const data=await api('bootstrap');state.mode='live';state.user=data.user;state.snapshot=data.snapshot||blankSnapshot();state.history=data.history||[];const settings=data.settings||data.snapshot||{};state.keys=settings.selectedMetricKeys?.length?settings.selectedMetricKeys:prefs.selected?.length?prefs.selected:DEFAULT_KEYS;state.rule=settings.rule||'overall_and_metric';state.store='';state.page=1;render();if(state.user.role==='staff'){state.keys=state.keys.filter(k=>defs().some(d=>d.key===k));if(!state.keys.length)state.keys=defs().slice(0,4).map(d=>d.key);render();await switchTab('reports');}}
-async function switchTab(tab){state.tab=tab;document.querySelectorAll('[data-tab]').forEach(button=>{const active=button.dataset.tab===tab;button.classList.toggle('active',active);button.setAttribute('aria-selected',String(active));});$('panel-reminders').hidden=tab!=='reminders';$('panel-reports').hidden=tab!=='reports';if(tab==='reports'&&!state.form){populatePeople();await loadSelectedReport();}}
+async function bootstrap(){const data=await api('bootstrap');state.mode='live';state.user=data.user;state.snapshot=data.snapshot||blankSnapshot();state.history=data.history||[];const settings=data.settings||data.snapshot||{};state.keys=settings.selectedMetricKeys?.length?settings.selectedMetricKeys:prefs.selected?.length?prefs.selected:DEFAULT_KEYS;state.rule=settings.rule||'overall_and_metric';state.store='';state.page=1;render();if(state.user.role==='staff'){state.keys=state.keys.filter(k=>defs().some(d=>d.key===k));if(!state.keys.length)state.keys=defs().slice(0,4).map(d=>d.key);render();await switchTab('reminders');await refreshReadStatus();if(state.user.mustChangePassword)$('passwordDialog').showModal();}}
+async function switchTab(tab){if(tab==='reports'&&state.user?.role==='staff'&&!(finite(state.snapshot.rows[0]?.overallProgress)&&state.snapshot.rows[0].overallProgress<80)){toast('本次總進度未低於80%，請在頁籤一完成閱讀確認。',true);return;}state.tab=tab;document.querySelectorAll('[data-tab]').forEach(button=>{const active=button.dataset.tab===tab;button.classList.toggle('active',active);button.setAttribute('aria-selected',String(active));});$('panel-reminders').hidden=tab!=='reminders';$('panel-reports').hidden=tab!=='reports';if(tab==='reports'&&!state.form){populatePeople();await loadSelectedReport();}}
 function populatePeople(){const all=$('allEmployees').checked||state.user?.role==='staff';const rows=state.snapshot.rows.filter(e=>all||eligible(e));const current=state.reportEmployee?.employeeId||$('employeeSelect').value;$('employeeSelect').innerHTML=rows.map(e=>'<option value="'+esc(e.employeeId)+'">'+esc(e.store+' · '+e.name+'（'+e.employeeId+'）')+'</option>').join('');if(rows.some(e=>e.employeeId===current))$('employeeSelect').value=current;$('emptyReport').hidden=rows.length>0;$('reportForm').hidden=!rows.length;$('reportActionbar').hidden=!rows.length;$('accessOpen').disabled=!rows.length;}
 function canDiscard(){return !state.dirty||window.confirm('目前內容尚未存檔。確定要離開並捨棄這次修改嗎？');}
 function reportContext(){return{employee:state.reportEmployee,snapshot:state.reportSnapshot,role:state.user?.role||'staff',nowDate:taipeiDate()};}
@@ -196,7 +197,7 @@ function openWorkbook(workbook,name){
 async function openFile(file){
  if(!file||state.busy)return;
  state.busy=true;
- try{toast('正在自動判讀報表…');const workbook=await readReportFile(file,window.XLSX);openWorkbook(workbook,file.name);toast(state.parsed?.rows.length?'判讀完成，請選擇今天要提醒的項目。':'已讀取檔案，請確認工作表與資料範圍。');}
+ try{toast('正在自動判讀報表…');const workbook=await readReportFile(file,window.XLSX);openWorkbook(workbook,file.name);if(state.user?.role==='admin'&&state.parsed?.ok&&validDate($('cutoffDate').value)&&$('targetBasis').value&&state.importKeys.length&&!state.mappingDirty){$('importConfirmed').checked=true;await publishImport();}else toast('判讀完成；如有日期或目標基準待確認，請確認後存入雲端。');}
  catch(error){caught(error);}
  finally{state.busy=false;$('fileInput').value='';}
 }
@@ -228,7 +229,7 @@ async function publishImport(){
  const rows=importRows().map(e=>({...e,metrics:Object.fromEntries(metricDefinitions.map(d=>[d.key,{...e.metrics[d.key],targetBasis:d.targetBasis}]))}));
  const snapshot={cutoffDate:date,sourceName:state.importName,sheetName:$('sheetSelect').value,metricDefinitions,rows,selectedMetricKeys:state.importKeys.filter(k=>metricDefinitions.some(d=>d.key===k)),rule:state.rule,importNotes:result.warnings.map(w=>w.message)};
  const errors=validateSnapshot(snapshot);if(errors.length){$('importStatus').textContent=errors.join(' ');return;}
- $('publishImport').disabled=true;$('importStatus').textContent='正在發布，請稍候…';
+ $('publishImport').disabled=true;$('importStatus').textContent='正在存入雲端，請稍候…';
  try{const saved=await api('upload',{snapshot});state.snapshot=saved.snapshot;state.keys=saved.snapshot.selectedMetricKeys;state.history.unshift({id:saved.snapshot.id,cutoffDate:date,sourceName:state.importName});state.form?.destroy();state.form=null;state.record=null;state.reportEmployee=null;state.dirty=false;state.page=1;render();$('importDialog').close();toast('已發布 '+rows.length+' 位同仁、'+metricDefinitions.length+' 個項目，本次選取 '+state.keys.length+' 項。');}
  catch(error){$('importStatus').textContent=error.message;}
  finally{$('publishImport').disabled=false;}
@@ -313,5 +314,11 @@ $('createAccess').onclick=async()=>{try{const result=await api('create_access',{
 $('copyAccess').onclick=async()=>{try{await navigator.clipboard.writeText($('accessURL').value);toast('已複製個人填報連結。');}catch{$('accessURL').select();toast('請複製已選取的連結。');}};
 $('revokeAccess').onclick=async()=>{if(!window.confirm('確定撤銷這位同仁目前的所有填報連結？已儲存的回報會保留。'))return;try{await api('revoke_access',{employeeId:state.reportEmployee.employeeId});$('accessResult').hidden=true;toast('已撤銷此人的所有舊連結，可重新產生。');}catch(error){caught(error);}};
 window.addEventListener('beforeunload',event=>{if(state.dirty){event.preventDefault();event.returnValue='';}});
+
+async function refreshReadStatus(){if(state.user?.role!=='staff'||!state.snapshot?.id)return;try{const r=await api('read_status',{snapshotId:state.snapshot.id});$('readStatus').textContent=r.confirmedAt?'已於 '+new Date(r.confirmedAt).toLocaleString('zh-TW')+' 確認閱讀':'尚未確認本次報表';$('confirmRead').disabled=!!r.confirmedAt;}catch(error){caught(error);}}
+$('confirmRead').onclick=async()=>{try{await api('confirm_read',{snapshotId:state.snapshot.id});await refreshReadStatus();toast('已保存本次閱讀確認。');}catch(error){caught(error);}};
+$('changePasswordOpen').onclick=()=>$('passwordDialog').showModal();
+$('passwordForm').onsubmit=async e=>{e.preventDefault();const fd=new FormData(e.currentTarget);if(fd.get('newPassword')!==fd.get('repeatPassword')){$('passwordError').textContent='兩次新密碼不同';return;}try{await api('change_password',{oldPassword:fd.get('oldPassword'),newPassword:fd.get('newPassword')});$('passwordError').textContent='密碼已更新，請重新登入。';setSession(null);location.reload();}catch(error){$('passwordError').textContent=error.message;}};
+
 async function init(){render();const access=new URLSearchParams(location.hash.slice(1)).get('access');if(access){setSession('staff:'+access);history.replaceState(null,'',location.pathname+location.search);}else{try{state.token=sessionStorage.getItem(SESSION);if(!state.token){const old=localStorage.getItem('n12c_fixed_token_v1');if(old)state.token='admin:'+old;}}catch{}}if(state.token){try{await bootstrap();}catch(error){setSession(null);if(access){state.mode='live';state.user={role:'staff',employeeId:''};state.snapshot=blankSnapshot();render();info('個人連結無法使用','<p>'+esc(error.message)+'</p>');}else caught(error);}}}
 init();
