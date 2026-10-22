@@ -301,6 +301,7 @@ $('publishImport').onclick=publishImport;
 $('historyOpen').onclick=()=>{if(state.mode==='demo'){info('歷史資料','<p>登入並發布資料後，每次上傳都會保存獨立快照，可回到指定日期檢閱。</p>');return;}$('historyList').innerHTML=state.history.length?state.history.map(h=>'<div class="history-row"><div><strong>'+esc(h.cutoffDate)+'</strong><small>'+esc(h.sourceName)+'</small></div><button class="button" data-history="'+esc(h.id)+'">開啟</button></div>').join(''):'<p>尚無已發布資料。</p>';$('historyDialog').showModal();};
 $('historyList').onclick=async event=>{const button=event.target.closest('[data-history]');if(!button||!canDiscard())return;try{state.snapshot=(await api('snapshot',{id:button.dataset.history})).snapshot;state.form?.destroy();state.form=null;state.record=null;state.dirty=false;state.keys=state.snapshot.selectedMetricKeys?.length?state.snapshot.selectedMetricKeys:state.keys;render();$('historyDialog').close();toast('已開啟 '+state.snapshot.cutoffDate+' 資料。');}catch(error){caught(error);}};
 $('reportThreshold').onchange=async()=>{if(!canDiscard())return;populatePeople();await loadSelectedReport();};
+$('reportThreshold').onchange=async()=>{if(!canDiscard())return;populatePeople();await loadSelectedReport();};
 $('allEmployees').onchange=async()=>{if(!canDiscard()){$('allEmployees').checked=!$('allEmployees').checked;return;}state.dirty=false;populatePeople();await loadSelectedReport();};
 $('employeeSelect').onchange=()=>loadSelectedReport();
 $('loadReport').onclick=()=>loadSelectedReport();
