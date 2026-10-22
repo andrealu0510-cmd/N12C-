@@ -106,3 +106,5 @@ if(footer){const badge=document.createElement('small');badge.textContent='版本
 await import('./staff-entry.js?v=20261022-staff-entry-1');
 // Store visibility is verified by a read-only service; individual report permissions are unchanged.
 await import('./store-progress.js?v=20261022-store-read-1');
+// Separate store report storage; never replaces employee snapshots or reports.
+await import('./store-hierarchy.js?v=20261022-grouped-1');
