@@ -100,4 +100,7 @@ new MutationObserver(()=>{
 }).observe($('toast'),{childList:true,characterData:true,subtree:true});
 refreshStorageUI();
 const footer=document.querySelector('.footer');
-if(footer){const badge=document.createElement('small');badge.textContent='版本 20261022.2 · 顯示修正／雲端資料保留';footer.append(badge);}
+if(footer){const badge=document.createElement('small');badge.textContent='版本 20261022.3 · 同仁閱讀與80%回報入口';footer.append(badge);}
+
+// Staff use the same authenticated site and existing report save flow.
+await import('./staff-entry.js?v=20261022-staff-entry-1');
