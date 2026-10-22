@@ -100,7 +100,9 @@ new MutationObserver(()=>{
 }).observe($('toast'),{childList:true,characterData:true,subtree:true});
 refreshStorageUI();
 const footer=document.querySelector('.footer');
-if(footer){const badge=document.createElement('small');badge.textContent='版本 20261022.3 · 同仁閱讀與80%回報入口';footer.append(badge);}
+if(footer){const badge=document.createElement('small');badge.textContent='版本 20261022.4 · 本店主管績效檢閱';footer.append(badge);}
 
 // Staff use the same authenticated site and existing report save flow.
 await import('./staff-entry.js?v=20261022-staff-entry-1');
+// Store visibility is verified by a read-only service; individual report permissions are unchanged.
+await import('./store-progress.js?v=20261022-store-read-1');
