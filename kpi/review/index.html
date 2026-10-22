@@ -6,14 +6,24 @@
 <title>北一二C｜KPI進度與每日改善回報</title>
 <link rel="stylesheet" href="./styles.css?v=20261022-1"><link rel="stylesheet" href="./report-ui.css?v=20261021-2">
 <script defer src="./vendor/xlsx.full.min.js"></script><script defer src="./vendor/html2canvas.min.js"></script>
+<style id="notice-layout-fix">
+/* Keep status copy in its own wrapping area, never in the fixed-size icon. */
+#modeNotice,#cloudStorageStatus{align-items:flex-start}
+#modeNotice>.notice-icon,#cloudStorageStatus>.notice-icon{flex:0 0 22px;width:22px;height:22px;white-space:nowrap;line-height:1;overflow:hidden}
+.notice>.notice-copy{min-width:0;flex:1 1 0}
+.notice-copy>span{display:block;overflow-wrap:anywhere}
+#modeNotice>.text-button{flex:0 0 auto;max-width:100%}
+#cloudStorageStatus{margin-bottom:18px}
+@media(max-width:650px){#modeNotice{flex-wrap:wrap}#modeNotice>.notice-copy{flex-basis:calc(100% - 36px)}#modeNotice>.text-button{display:block;margin-left:34px}}
+</style>
 </head>
 <body>
 <a class="skip-link" href="#main">跳至主要內容</a>
 <header class="topbar"><div class="shell topbar-inner"><a class="brand" href="../../portal/" id="portalLink"><span class="brand-mark">C<span></span></span><span><strong>北一二C</strong><small>每日績效管理</small></span></a><div class="topbar-right"><span id="sessionLabel" class="status-dot">請登入讀取已保存資料</span><button id="loginOpen" class="button button-small">主管登入</button><button id="logout" class="button button-small" hidden>登出</button><a href="../../portal/" class="portal-return">返回入口 ↗</a></div></div></header>
 <main id="main" class="shell">
  <section class="page-heading"><div><p class="eyebrow">DAILY PERFORMANCE REVIEW</p><h1>每日進度，逐項落實<span>。</span></h1><p class="intro">自選提醒項目，掌握落後差額，留下具體行動與改善結果。</p></div><div class="period-card"><span id="periodMonth">10 月進度</span><div><strong id="periodDay">21</strong><span>/ <b id="periodDays">31</b></span></div><small id="periodLabel">請上傳資料，確認截止日</small></div></section>
- <div class="notice demo-notice" id="modeNotice"><span class="notice-icon">i</span><div><strong>已保存的資料不會因關閉網頁而刪除</strong><span>請登入後讀取已保存的雲端報表，無需重新上傳。</span></div><button id="demoReset" class="text-button">重設示範</button></div>
- <div class="notice" id="cloudStorageStatus" hidden><span class="notice-icon">✓</span><div><strong>雲端資料已保存</strong><span id="cloudStorageText"></span></div></div>
+ <div class="notice demo-notice" id="modeNotice"><span class="notice-icon" id="modeNoticeIcon" aria-hidden="true">i</span><div class="notice-copy"><strong id="modeNoticeTitle">已保存的資料不會因關閉網頁而刪除</strong><span id="modeNoticeMessage">請登入後讀取已保存的雲端報表，無需重新上傳。</span></div><button id="demoReset" class="text-button">重設示範</button></div>
+ <div class="notice" id="cloudStorageStatus" hidden><span class="notice-icon" aria-hidden="true">✓</span><div class="notice-copy"><strong>雲端資料已保存</strong><span id="cloudStorageText"></span></div></div>
  <nav class="tabs" aria-label="功能頁籤"><button class="tab active" id="tab-reminders" role="tab" aria-selected="true" aria-controls="panel-reminders" data-tab="reminders"><span>01</span>KPI進度提醒</button><button class="tab" id="tab-reports" role="tab" aria-selected="false" aria-controls="panel-reports" data-tab="reports"><span>02</span>每日改善回報 <b id="queueCount" class="count-badge">0</b></button></nav>
  <section id="panel-reminders" role="tabpanel" aria-labelledby="tab-reminders">
   <div class="upload-strip" id="uploadStrip"><div class="upload-icon">↑</div><div><strong>每日上傳 01-01-05 個人 KPI</strong><p>直接上傳原始 Excel 或貼上內容，系統自動判讀，不用逐欄對照。</p></div><label class="button button-primary" id="uploadLabel">選擇 Excel<input id="fileInput" type="file" accept=".xlsx,.xls,.csv,.tsv,.txt" class="visually-hidden"></label><button type="button" class="button" id="pasteOpen">貼上 Excel 內容</button><button class="button" id="restoreCloud" hidden>重新載入雲端</button><button class="button" id="historyOpen">歷史資料</button></div>
@@ -62,5 +72,5 @@
 <dialog id="presetDialog"><form id="presetForm"><div class="dialog-header"><h2>儲存常用組合</h2><button type="button" class="icon-button close-dialog" aria-label="關閉">×</button></div><label>組合名稱<input id="presetName" maxlength="30" required placeholder="例如：週三配件包膜"></label><p id="presetSummary"></p><button class="button button-primary">儲存組合</button></form></dialog>
 <dialog id="accessDialog"><div class="dialog-header"><h2>個人填報連結</h2><button class="icon-button close-dialog" aria-label="關閉">×</button></div><p id="accessPerson"></p><p class="muted">連結僅能查看與填寫這位同仁的資料，有效 7 天。請直接提供給本人。</p><div class="button-row"><button id="createAccess" class="button button-primary">產生個人連結</button><button id="revokeAccess" class="button">撤銷此人所有連結</button></div><div id="accessResult" hidden><label>連結<input id="accessURL" readonly></label><p id="accessExpiry" class="muted"></p><button id="copyAccess" class="button">複製連結</button></div></dialog>
 <div id="toast" role="status" aria-live="polite" hidden></div><div id="captureStage" aria-hidden="true"></div>
-<script type="module" src="./continuity.js?v=20261022-persistence-1"></script>
+<script type="module" src="./continuity.js?v=20261022-layout-2"></script>
 </body></html>

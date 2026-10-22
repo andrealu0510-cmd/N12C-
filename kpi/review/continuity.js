@@ -23,16 +23,27 @@ function refreshStorageUI(){
  const signedIn=isSignedIn();
  for(const panel of privatePanels)panel.hidden=!signedIn&&!explicitDemo;
  $('restoreCloud').hidden=!signedIn;
+ $('queueCount').hidden=!signedIn&&!explicitDemo;
  const hasSnapshot=signedIn&&!/示範|尚未發布/.test($('sourceInfo').textContent);
  $('cloudStorageStatus').hidden=!hasSnapshot;
  $('cloudStorageText').textContent=hasSnapshot?'目前顯示已發布的雲端報表。關閉網頁不會刪除資料；重新登入後會自動讀回，也可從「歷史資料」選日期。':'';
  if(!signedIn&&!explicitDemo){
   if($('sessionLabel').textContent!=='尚未登入 · 雲端資料保留')$('sessionLabel').textContent='尚未登入 · 雲端資料保留';
   const notice=$('modeNotice');notice.hidden=false;
-  notice.querySelector('strong').textContent='請登入讀回已保存的雲端資料';
-  notice.querySelector('div > span').textContent='已發布的 KPI 報表仍保留，不需要重新上傳。未登入時不顯示正式績效資料。';
+ // Use explicit content slots: an unscoped 'div > span' also matches the
+ // notice icon because the notice container itself is a div.
+ (document.getElementById('modeNoticeIcon')||notice.querySelector(':scope > .notice-icon')).textContent='i';
+ (document.getElementById('modeNoticeTitle')||notice.querySelector(':scope > div > strong')).textContent='請登入讀回已保存的雲端資料';
+ (document.getElementById('modeNoticeMessage')||notice.querySelector(':scope > div > span')).textContent='已發布的 KPI 報表仍保留，不需要重新上傳。未登入時不顯示正式績效資料。';
   $('demoReset').textContent='查看示範（非正式資料）';
   $('periodMonth').textContent='登入後讀取資料';$('periodDay').textContent='—';$('periodDays').textContent='—';$('periodLabel').textContent='不是空資料，請先登入';
+ }
+ if(!signedIn&&explicitDemo){
+  const notice=$('modeNotice');notice.hidden=false;
+  (document.getElementById('modeNoticeIcon')||notice.querySelector(':scope > .notice-icon')).textContent='i';
+  (document.getElementById('modeNoticeTitle')||notice.querySelector(':scope > div > strong')).textContent='目前顯示操作示範（非正式資料）';
+  (document.getElementById('modeNoticeMessage')||notice.querySelector(':scope > div > span')).textContent='以下為虛構資料，不會覆蓋雲端報表。登入後即可讀回已保存的正式資料。';
+  $('demoReset').textContent='重設示範';
  }
  $('publishImport').textContent='儲存至雲端並使用';
 }
@@ -89,4 +100,4 @@ new MutationObserver(()=>{
 }).observe($('toast'),{childList:true,characterData:true,subtree:true});
 refreshStorageUI();
 const footer=document.querySelector('.footer');
-if(footer){const badge=document.createElement('small');badge.textContent='版本 20261022 · 雲端資料保留修正';footer.append(badge);}
+if(footer){const badge=document.createElement('small');badge.textContent='版本 20261022.2 · 顯示修正／雲端資料保留';footer.append(badge);}
