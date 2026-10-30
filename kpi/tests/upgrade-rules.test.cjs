@@ -10,7 +10,7 @@ const context = vm.createContext({window:{}, ITEMS, state, EXPECTED:[{store:'測
   n:v=>v==null||v===''?null:Number(String(v).replace(/[% ,]/g,'')),
   clean:v=>Math.round(v*10)/10, storeMap:()=>Object.fromEntries(state.stores.map(x=>[x.store,x])),
   pct:v=>v==null?'—':v+'%', structuredClone});
-const expose = ['score','evalStore','evalPerson','n12cRateColumns','n12cReadMetrics','metricClass','metricTd','n12cMetricRate','n12cTotals','n12cScoreRows','n12cDeduction','n12cDeductionText','n12cSummaryDeduction'];
+const expose = ['score','evalStore','evalPerson','n12cRateColumns','n12cReadMetrics','metricClass','metricTd','n12cMetricRate','n12cTotals','n12cScoreRows','n12cDeduction','n12cDeductionText','n12cSummaryDeduction','parseDelimited','extractStores','extractPeople','n12cInsuranceParse','n12cInsuranceRefresh','n12cInsuranceRate'];
 vm.runInContext(source.replace('window.n12cUpgradeHtml=upgradeHtml;', 'Object.assign(window,{'+expose.join(',')+'});window.n12cUpgradeHtml=upgradeHtml;'), context);
 context.rateN=v=>v==null||v===''?null:String(v).includes('%')?context.n(v):Number(v)<=3?Number(v)*100:Number(v);
 const app=context.window;
@@ -122,22 +122,22 @@ if(process.env.N12C_TEMPLATE_PATH){
     const html=app.n12cUpgradeHtml(fs.readFileSync(process.env.N12C_TEMPLATE_PATH,'utf8'));
     const scripts=[...html.matchAll(/<script\b[^>]*>([\s\S]*?)<\/script>/gi)].map(m=>m[1]).filter(Boolean);
     for(const script of scripts)new vm.Script(script);
-    assert.ok(html.includes('一條龍6項'));
-    assert.ok(html.includes('0.1 × 4項 ＋ 0.2 × 2項＝0.8分'));
+    assert.ok(html.includes('一條龍7項'));
+    assert.ok(html.includes('0.1 × 5項 ＋ 0.2 × 2項＝0.9分'));
     assert.ok(html.includes('SPE總計扣分'));
     assert.ok(!html.includes('${i.key} ${pct(i.rate)} (-0.1)'));
     assert.ok(!html.includes('附掛4項'));
     assert.ok(!html.includes('附掛6項'));
-    assert.ok(!html.includes('一條龍7項'));
+    assert.ok(!html.includes('一條龍6項'));
     assert.ok(!html.includes('空機'));
-    assert.ok(!html.includes('0.9 分'));
+    assert.ok(html.includes('0.9 分'));
     assert.ok(!html.includes('規則：<100% -0.1'));
     const main=scripts.find(s=>s.includes('const ITEMS='));
     const declarations=main.slice(0,main.indexOf('\ndocument.querySelectorAll(".tab").forEach'));
     const live=vm.createContext({structuredClone,window:{}});
     vm.runInContext(declarations.replace(/const EXPECTED=.*?;\n/, 'const EXPECTED=[{store:"測試店",empId:"TEST001",name:"測試員",role:"業務代表(I)"}];\n'),live);
     assert.equal(vm.runInContext('score(49,"配件")',live),-.2);
-    assert.equal(vm.runInContext('ITEMS.length',live),6);
+    assert.equal(vm.runInContext('ITEMS.length',live),7);
     for(const kind of ['103','105']) {
       const rows=fixture(kind,2);
       for(const label of ['AQ V+D 1399 (含)以上','RT V+D 1399 (含)以上','好速案銷售點數']) {
@@ -157,7 +157,7 @@ if(process.env.N12C_TEMPLATE_PATH){
     live.document={createElement:()=>({click(){}})};
     live.testMetrics={...Object.fromEntries(ITEMS.map(k=>[k,120])),配件:49};
     vm.runInContext(`state={stores:[{store:'測試店',metrics:Object.fromEntries(ITEMS.map(k=>[k,100]))}],people:[{store:'測試店',empId:'TEST001',name:'測試員',role:'業務代表(I)',metrics:testMetrics}]};
-      n12cPeriodReady=()=>({ok:true});n12cSourceMeta=()=>({date:'2026/10/30'});n12cExportCsv();`,live);
+      state.insurance={'010508':{records:[{key:'測試店',rate:50}]},'010509':{records:[{key:'TEST001',store:'測試店',rate:50}]}};n12cPeriodReady=()=>({ok:true});n12cSourceMeta=()=>({date:'2026/10/30'});n12cExportCsv();`,live);
     assert.ok(!live.csv.includes('空機'));
     const csvRows=live.csv.replace(/^\uFEFF/,'').split('\r\n').map(line=>line.match(/"([^"]|"")*"/g).map(cell=>cell.slice(1,-1)));
     assert.equal(csvRows[1][csvRows[0].indexOf('SPE總計扣分')],'-0.2');
@@ -168,3 +168,51 @@ if(process.env.N12C_TEMPLATE_PATH){
     }
   });
 }
+
+test('Excel TSV preserves quoted multiline cells, tabs, commas, and escaped quotes',()=>{
+  const parsed=app.parseDelimited('門市\t"進度\n達成率"\t備註\n測試店\t44.9%\t"含,逗號與""引號"""\n');
+  assert.deepEqual(JSON.parse(JSON.stringify(parsed)),[['門市','進度\n達成率','備註'],['測試店','44.9%','含,逗號與"引號"']]);
+});
+test('DOD preamble and district/store headers with shifted columns use the store section',()=>{
+  const district=fixture('103',0),store=fixture('103',4);
+  district[3][0]='區域合計';
+  store[1][16]='Google服務及雜誌週刊開通數';
+  store[2]=store[2].map(v=>v==='進度達成率'?'進度\n達成率':v);
+  const rows=[['DOD檢視'],['測試店','99%'],...district,...store];
+  const records=app.extractStores(rows);
+  assert.equal(records.length,1);
+  assert.deepEqual(ITEMS.map(k=>records[0].metrics[k]),[99,100,70,69,49,50]);
+  assert.equal(records[0].metricSources['Apple服務'],'Google服務及雜誌週刊開通數');
+});
+test('Unrecognized person headers cannot silently reuse fixed-index metrics',()=>{
+  const rec={empId:'TEST001',metrics:baseline()};
+  app.n12cReadMetrics([['測試店','業務代表(I)','TEST001','測試員']], [rec], '105');
+  assert.ok(ITEMS.every(k=>rec.metrics[k]===null));
+});
+test('Insurance uses official store/person rates, 45% boundary, no waiver or bonus',()=>{
+  const initial=ITEMS.length;ITEMS.push('保險搭售');
+  try{
+    state.people=[{empId:'TEST001',store:'測試店'}];
+    state.rawUploads={
+      '010508':{source:'508',rows:[['資料日期','2026/10/30'],['門市','整體保險搭售率'],['測試店','45%']]},
+      '010509':{source:'509',rows:[['資料日期','2026/10/30'],['門市','員編','保險搭售率'],['測試店','TEST001','44.9%']]}
+    };
+    app.n12cInsuranceRefresh();
+    state.stores=[{store:'測試店',metrics:baseline()}];
+    const p={empId:'TEST001',store:'測試店',metrics:baseline(),insuranceActual:999,deviceActual:1};
+    assert.equal(app.evalStore(state.stores[0]).total,0);
+    assert.equal(app.evalPerson(p).total,-.1);
+    assert.equal(app.score(45,'保險搭售'),0);assert.equal(app.score(150,'保險搭售'),0);
+    assert.equal(app.n12cDeduction(app.evalPerson(p)),-.1);
+    state.insurance['010508'].records[0].rate=150;
+    assert.equal(app.evalPerson(p).total,-.1);
+    state.insurance['010508'].records[0].rate=0;
+    assert.equal(app.evalStore({store:'測試店',metrics:Object.fromEntries(ITEMS.map(k=>[k,0]))}).total,-.9);
+    assert.equal(app.n12cInsuranceRate({...p,empId:'UNKNOWN'}),null);
+    assert.equal(app.n12cInsuranceRate({...p,store:'其他店'}),null);
+    assert.equal(app.n12cInsuranceParse([['門市','手機保險服務點數'],['測試店','45%']],'010508').records.length,0);
+    assert.equal(app.n12cInsuranceParse([['門市','手機搭售率','穿戴搭售率'],['測試店','45%','50%']],'010508').records.length,0);
+    assert.equal(app.n12cInsuranceParse([['門市','保險搭售率'],['測試店','45%'],['測試店','50%']],'010508').records.length,0);
+    state.rawUploads['010509'].confirmedDate='2026/10/29';app.n12cInsuranceRefresh();assert.equal(state.insurance['010509'].date,'2026/10/29');
+  }finally{ITEMS.splice(initial);state.rawUploads={};state.insurance={};state.stores=[];state.people=[];}
+});
