@@ -108,3 +108,5 @@ await import('./staff-entry.js?v=20261022-staff-entry-1');
 await import('./store-progress.js?v=20261022-store-read-1');
 // Separate store report storage; never replaces employee snapshots or reports.
 await import('./store-hierarchy.js?v=20261022-store-parser-2');
+// Route store reports to their existing, separately authorized cloud endpoint.
+await import('./upload-router.js?v=20261031-upload-routing-1');
