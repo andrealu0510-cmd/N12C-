@@ -1,8 +1,8 @@
 /* N12C daily-review patch. Application code only; no report rows or credentials. */
 (function () {
   'use strict';
-  const VERSION = '2026-10-30.1';
-  const LOADER_VERSION = '2026-10-30.1';
+  const VERSION = '2026-10-30.2';
+  const LOADER_VERSION = '2026-10-30.2';
   function upgradeHtml(input) {
     let html = String(input);
     const replaceOnce = (oldText, newText) => {
@@ -45,18 +45,19 @@
     for (const old of ['規則：<70% -0.2｜<100% -0.1｜>110% +0.1', '規則：<100% -0.1｜100~110%(含) 0｜>110% +0.1']) {
       html = html.replaceAll(old, '規則：V+K／Apple<100% −0.1；影音／Netflix<70% −0.1；空機3C<80% −0.1；配件／包膜<50% −0.2、50%～未滿80% −0.1；>110% +0.1');
     }
-    html = html.replace(/<div class="rules">[\s\S]*?<\/div>/, '<div class="rules"><strong>一條龍7項｜分項加減分規則（2026-10-30更新）</strong><div class="table-wrap"><table><thead><tr><th>項目</th><th>扣分門檻</th></tr></thead><tbody><tr><td>V+K（MyVideo&KKBOX）</td><td>未達100%：−0.1</td></tr><tr><td>Apple服務／開通</td><td>未達100%：−0.1</td></tr><tr><td>HBO Max＆Disney+＆Prime Video</td><td>未達70%：−0.1（合併一項）</td></tr><tr><td>Netflix多享組</td><td>未達70%：−0.1</td></tr><tr><td>空機、3C、物聯網及門市購營收</td><td>未達80%：−0.1</td></tr><tr><td>配件及其他營收</td><td>低於50%：−0.2；50%～未滿80%：−0.1</td></tr><tr><td>包膜與保貼營收</td><td>低於50%：−0.2；50%～未滿80%：−0.1</td></tr></tbody></table></div>◆ 恰好達門檻不扣該級分數；同項扣分擇一、不累扣。各項超過110%：<span class="good">+0.1</span>。<br>◆ 店績同項超過100%，個人扣分豁免；店長／代理店長只採店績。<br>◆ Apple服務／開通沿用「Apple&Google服務及雜誌週刊開通數」報表欄位（原標示天下／開通），同一欄不重複計分。<br>◆ 保險搭售、QIS、舊機回收由督導人工確認；缺少欄位顯示待補，不以0分結算。</div>');
+    html = html.replace(/<div class="rules">[\s\S]*?<\/div>/, '<div class="rules"><strong>一條龍7項｜分項加減分規則（2026-10-30更新）</strong><div class="table-wrap"><table><thead><tr><th>項目</th><th>扣分門檻</th></tr></thead><tbody><tr><td>V+K（MyVideo&KKBOX）</td><td>未達100%：−0.1</td></tr><tr><td>Apple服務／開通</td><td>未達100%：−0.1</td></tr><tr><td>HBO Max＆Disney+＆Prime Video</td><td>未達70%：−0.1（合併一項）</td></tr><tr><td>Netflix多享組</td><td>未達70%：−0.1</td></tr><tr><td>空機、3C、物聯網及門市購營收</td><td>未達80%：−0.1</td></tr><tr><td>配件及其他營收</td><td>低於50%：−0.2；50%～未滿80%：−0.1</td></tr><tr><td>包膜與保貼營收</td><td>低於50%：−0.2；50%～未滿80%：−0.1</td></tr></tbody><tfoot><tr class="n12c-rule-total"><th>SPE總計扣分（本表7項最重級距）</th><td><strong>−0.9 分</strong><br><small>0.1 × 5項 ＋ 0.2 × 2項＝0.9分</small></td></tr></tfoot></table></div>◆ 以上為每人7項均落在最重扣分級距、未套用店績豁免時的扣分上限；實際依達成率計算。<br>◆ 恰好達門檻不扣該級分數；同項扣分擇一、不累扣。各項超過110%：<span class="good">+0.1</span>。<br>◆ 店績同項超過100%，個人扣分豁免；店長／代理店長只採店績。<br>◆ Apple服務／開通沿用「Apple&Google服務及雜誌週刊開通數」報表欄位（原標示天下／開通），同一欄不重複計分。<br>◆ 保險搭售、QIS、舊機回收由督導人工確認；缺少欄位顯示待補，不以0分結算。<div class="n12c-deduction-banner" role="status" aria-live="polite"><span>全區人員 SPE總計扣分（含店長）</span><strong id="n12cDeductionSummary">待補資料</strong><small>計入店績豁免後的實際扣分，加分另列；資料未齊時只顯示完整人員暫算。</small></div></div>');
     html = html.replace('Y2609 管理辦法｜固定網頁版', '每日管理檢閱｜一條龍7項加減分');
     const syncUi = `<section class="panel" id="n12cSyncPanel"><div class="panel-title">資料連動狀態 <small>修正版 ${VERSION}</small></div><div id="n12cSourceStatus" class="copybox"></div><div class="controls" style="margin-top:10px"><button class="btn btn-blue" id="n12cRecalc">重新檢閱／計算總分</button><button class="btn btn-soft" id="n12cToUpload">前往資料上傳</button></div><details><summary>報表日期未辨識時，在此確認（不必重傳）</summary><div class="controls" style="margin-top:8px"><label>010103 資料截止日 <input type="date" id="n12cDate103"></label><label>010105 資料截止日 <input type="date" id="n12cDate105"></label><button class="btn btn-soft" id="n12cConfirmDates">確認資料日期</button></div><div class="note">此處是報表資料日，不是今天日期；兩份報表的截止日須一致才可確認結算。</div></details></section>`;
     replaceOnce('<section id="sheet-overview"', syncUi + '\n<section id="sheet-overview"');
     replaceOnce('<div class="tabs">', '<div class="tabs"><button class="tab" data-sheet="totals">SPE總分計算</button>');
-    const totalsUi = `<section id="sheet-totals" class="sheet"><div class="panel"><div class="panel-title">一條龍7項｜SPE總分計算</div><div id="n12cTotalNotice" class="complete"></div><div class="summary" style="margin-top:10px"><div class="sum blue"><div class="n" id="n12cNet">—</div><div class="t">人員淨總分（含店長）</div></div><div class="sum green"><div class="n" id="n12cPlus">—</div><div class="t">單項加分合計</div></div><div class="sum red"><div class="n" id="n12cMinus">—</div><div class="t">單項扣分合計</div></div><div class="sum"><div class="n" id="n12cReady">0</div><div class="t">資料完整人數</div></div><div class="sum red"><div class="n" id="n12cPending">0</div><div class="t">待補資料人數</div></div></div><div class="controls" style="margin-top:10px"><button class="btn btn-blue" id="n12cExport">匯出計分CSV</button><button class="btn btn-soft" id="n12cCopyTotals">複製總分摘要</button></div><div class="note">一般同仁以個人成績計算，店績同項＞100%免除該項個人扣分；個人＞110%仍保留加分。店長／代理店長只計一次店績，店績合計不再重複加進人員總分。保險金牌不列入SPE。</div></div><div class="panel"><div class="panel-title">各店人員合計</div><div class="table-wrap" id="n12cStoreTotals"></div></div><div class="panel"><div class="panel-title">每人七項計分明細</div><div class="table-wrap" id="n12cPersonTotals"></div></div></section>`;
+    const totalsUi = `<section id="sheet-totals" class="sheet"><div class="panel"><div class="panel-title">一條龍7項｜SPE總分計算</div><div id="n12cTotalNotice" class="complete"></div><div class="summary" style="margin-top:10px"><div class="sum blue"><div class="n" id="n12cNet">—</div><div class="t">人員淨總分（含店長）</div></div><div class="sum green"><div class="n" id="n12cPlus">—</div><div class="t">單項加分合計</div></div><div class="sum red"><div class="n" id="n12cMinus">—</div><div class="t">SPE總計扣分</div></div><div class="sum"><div class="n" id="n12cReady">0</div><div class="t">資料完整人數</div></div><div class="sum red"><div class="n" id="n12cPending">0</div><div class="t">待補資料人數</div></div></div><div class="controls" style="margin-top:10px"><button class="btn btn-blue" id="n12cExport">匯出計分CSV</button><button class="btn btn-soft" id="n12cCopyTotals">複製總分摘要</button></div><div class="note">一般同仁以個人成績計算，店績同項＞100%免除該項個人扣分；個人＞110%仍保留加分。店長／代理店長只計一次店績，店績合計不再重複加進人員總分。保險金牌不列入SPE。</div></div><div class="panel"><div class="panel-title">各店人員合計</div><div class="table-wrap" id="n12cStoreTotals"></div></div><div class="panel"><div class="panel-title">每人七項計分明細</div><div class="table-wrap" id="n12cPersonTotals"></div></div></section>`;
     replaceOnce('<section id="sheet-store"', totalsUi + '\n<section id="sheet-store"');
-    html = html.replace('</style>', '#n12cSyncPanel small{font-size:13px;color:var(--muted)}#n12cSourceStatus{overflow-wrap:anywhere}#n12cPersonTotals table,#n12cStoreTotals table{font-size:17px}#n12cPersonTotals td small{font-size:12px}.bad1{background:var(--redsoft)!important;color:var(--red)!important;font-weight:900}.n12c-pending{color:#8a4b00;background:#fff4d8;font-weight:800}#n12cSyncPanel input{padding:7px;border:1px solid #bbc3d4;border-radius:7px}\n</style>');
+    html = html.replace('</style>', '.n12c-rule-total th,.n12c-rule-total td{background:#fde9ec!important;color:#b00020!important;font-size:18px;font-weight:900}.n12c-rule-total strong{font-size:26px}.n12c-rule-total small{font-size:13px}.n12c-deduction-banner{display:flex;align-items:center;flex-wrap:wrap;gap:8px 20px;background:#fff0f1;border:2px solid #d7263d;border-radius:9px;padding:12px;margin-top:10px;color:#a5001b;font-weight:900}.n12c-deduction-banner strong{font-size:28px}.n12c-deduction-banner small{flex-basis:100%;font-size:13px;color:#6d7482;font-weight:500}.n12c-deduction-cell{color:#b00020;font-weight:900;white-space:nowrap}.mobile-score small{display:block;font-size:12px}#n12cSyncPanel small{font-size:13px;color:var(--muted)}#n12cSourceStatus{overflow-wrap:anywhere}#n12cPersonTotals table,#n12cStoreTotals table{font-size:17px}#n12cPersonTotals td small{font-size:12px}.bad1{background:var(--redsoft)!important;color:var(--red)!important;font-weight:900}.n12c-pending{color:#8a4b00;background:#fff4d8;font-weight:800}#n12cSyncPanel input{padding:7px;border:1px solid #bbc3d4;border-radius:7px}\n</style>');
     // All old listeners keep their functions, while every render uses the patched shared state.
     replaceOnce('function renderFilters(){', 'function renderFilters(){\n n12cRenderExtras();');
     const functions = [n12cMetricRate, n12cRateColumns, n12cReadMetrics, extractPeople, extractStores,
       scoreTxt, metricClass, evalStore, evalPerson, metricTd,
+      n12cDeduction, n12cDeductionText, n12cDeductionCell, n12cSummaryDeduction,
       n12cValidDate, n12cDetectPeriod, n12cSourceMeta, n12cPeriodReady, n12cUpdateMeta,
       n12cUploadStatus, applyFile, applyPaste, n12cScoreRows, n12cTotals,
       n12cTotalText, n12cExportCsv, n12cRenderExtras, n12cBootstrap];
@@ -69,6 +70,15 @@
     html = html.replace('state.date=date.replace(/-/g,"/");\n const h=readHistory();', 'const h=readHistory();');
     html = html.replace('const payload={version:6,exported_at:', 'const payload={version:18,rule_version:N12C_RULE_VERSION,exported_at:');
     html = html.replaceAll('esc(k.replace("影音(HBO/D+/Prime)","影音"))', 'esc(k.replace("影音(HBO/D+/Prime)","影音").replace("VK","V+K").replace("Apple服務","Apple服務／開通"))');
+    // Keep deductions visible beside net SPE in the legacy store/person views.
+    html = html.replaceAll('<th>SPE</th>', '<th>SPE總計扣分</th><th>SPE淨分</th>');
+    replaceOnce('${ev.items.map(metricTd).join("")}<td class=', '${ev.items.map(metricTd).join("")}${n12cDeductionCell(ev)}<td class=');
+    replaceOnce('${e.items.map(metricTd).join("")}<td class=', '${e.items.map(metricTd).join("")}${n12cDeductionCell(e)}<td class=');
+    replaceOnce('${ITEMS.map(()=>"<td>未載入</td>").join("")}<td>—</td>', '${ITEMS.map(()=>"<td>未載入</td>").join("")}<td class="n12c-pending">待補資料</td><td>—</td>');
+    replaceOnce('<div class="mobile-score">SPE ${scoreTxt(ev.total)}</div>', '<div class="mobile-score">SPE總計扣分 ${n12cDeductionText(n12cDeduction(ev))}<small>SPE淨分 ${scoreTxt(ev.total)}</small></div>');
+    html = html.replaceAll('SPE ${scoreTxt(x.ev.total)}', 'SPE總計扣分 ${n12cDeductionText(n12cDeduction(x.ev))}｜SPE淨分 ${scoreTxt(x.ev.total)}');
+    // The old reminder hard-coded -0.1 even when an item now deducts -0.2.
+    html = html.replaceAll('${i.key} ${pct(i.rate)} (-0.1)', '${i.key} ${pct(i.rate)} (${scoreTxt(i.score)})');
     return html;
   }
 
@@ -165,6 +175,21 @@
   function metricTd(item) {
     const detail=item.score==null?'待補資料':item.exempt?'店績豁免扣分':scoreTxt(item.score);
     return '<td class="'+(item.score==null?'n12c-pending':item.exempt?'exempt':metricClass(item.rate,item.key))+'">'+pct(item.rate)+'<br><small>'+detail+'</small></td>';
+  }
+  function n12cDeduction(ev) {
+    if (!ev || ev.total == null || !ev.items?.length || ev.items.some(i => i.score == null || !Number.isFinite(Number(i.score)))) return null;
+    return clean(ev.items.reduce((sum, i) => sum + Math.min(0, Number(i.score)), 0));
+  }
+  function n12cDeductionText(value) {
+    return value == null || !Number.isFinite(Number(value)) ? '待補資料' : '扣 ' + Math.abs(Number(value)).toFixed(1) + ' 分';
+  }
+  function n12cDeductionCell(ev) {
+    const deduction = n12cDeduction(ev);
+    return '<td class="' + (deduction == null ? 'n12c-pending' : 'n12c-deduction-cell') + '">' + n12cDeductionText(deduction) + '</td>';
+  }
+  function n12cSummaryDeduction(summary, periodReady) {
+    if (!summary.ready) return '待補資料';
+    return (periodReady && !summary.pending ? '' : '暫算 ') + n12cDeductionText(summary.minus);
   }
   function n12cValidDate(y,m,d) {
     y=Number(y);m=Number(m);d=Number(d);if(y<1911)y+=1911;
@@ -271,16 +296,17 @@
     return ['【北一二C｜一條龍7項SPE總分】', '規則版本：'+N12C_RULE_VERSION,
       '010103：'+(n12cSourceMeta('103').date||'未確認日期')+'｜010105：'+(n12cSourceMeta('105').date||'未確認日期'),
       check.ok&&s.pending===0?'可結算':'暫算／尚不可完整結算',check.reason,
-      '已知人員淨總分：'+scoreTxt(s.net)+'｜加分：'+scoreTxt(s.plus)+'｜扣分：'+scoreTxt(s.minus),
+      '全區人員SPE總計扣分：'+n12cSummaryDeduction(s,check.ok),
+      '已知人員淨總分：'+scoreTxt(s.net)+'｜加分：'+scoreTxt(s.plus),
       '完整 '+s.ready+' 人；待補 '+s.pending+' 人。',
       'V+K／Apple<100% −0.1；影音／Netflix<70% −0.1；空機3C<80% −0.1；配件／包膜<50% −0.2、50%～未滿80% −0.1；各項>110% +0.1。',
       '店長只採店績一次；未達項套用店績＞100%豁免扣分；保險金牌不計入SPE。'].join('\n');
   }
   function n12cExportCsv() {
     const rows=n12cScoreRows(),check=n12cPeriodReady(),summary=n12cTotals(rows);
-    const head=['010103資料日','010105資料日','規則版本','門市','員編','姓名','職稱','認列方式',...ITEMS.flatMap(k=>[k+'達成率',k+'計分',k+'豁免扣分']),'SPE合計','結算狀態'];
+    const head=['010103資料日','010105資料日','規則版本','門市','員編','姓名','職稱','認列方式',...ITEMS.flatMap(k=>[k+'達成率',k+'計分',k+'豁免扣分']),'SPE總計扣分','SPE淨分','結算狀態'];
     const a=n12cSourceMeta('103'),b=n12cSourceMeta('105');
-    const body=rows.map(x=>[a.date||'未確認',b.date||'未確認',N12C_RULE_VERSION,x.rec.store,x.rec.empId,x.rec.name,x.rec.role,x.manager?'店績':'個人',...x.ev.items.flatMap(i=>[i.rate==null?'':i.rate,i.score==null?'':i.score,i.exempt?'是':'否']),x.ev.total==null?'':x.ev.total,x.rec.missing?'人員未載入':x.ev.total==null?'待補資料':check.ok&&summary.pending===0?'可結算':'暫算']);
+    const body=rows.map(x=>[a.date||'未確認',b.date||'未確認',N12C_RULE_VERSION,x.rec.store,x.rec.empId,x.rec.name,x.rec.role,x.manager?'店績':'個人',...x.ev.items.flatMap(i=>[i.rate==null?'':i.rate,i.score==null?'':i.score,i.exempt?'是':'否']),n12cDeduction(x.ev)??'',x.ev.total==null?'':x.ev.total,x.rec.missing?'人員未載入':x.ev.total==null?'待補資料':check.ok&&summary.pending===0?'可結算':'暫算']);
     const quote=v=>{let s=String(v??'');if(typeof v==='string'&&/^[=+\-@]/.test(s))s="'"+s;return '"'+s.replace(/"/g,'""')+'"';};
     const blob=new Blob(['\uFEFF'+[head,...body].map(r=>r.map(quote).join(',')).join('\r\n')],{type:'text/csv;charset=utf-8'});
     const link=document.createElement('a'),url=URL.createObjectURL(blob);link.href=url;link.download='N12C_一條龍7項SPE_'+(a.date||'日期待確認').replaceAll('/','-')+'.csv';link.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
@@ -297,13 +323,16 @@
     }).join('\n\n');
     const check=n12cPeriodReady(),rows=n12cScoreRows(),s=n12cTotals(rows);
     document.getElementById('n12cNet').textContent=(check.ok&&s.pending===0?'':'暫算 ')+scoreTxt(s.net);
-    document.getElementById('n12cPlus').textContent=scoreTxt(s.plus);document.getElementById('n12cMinus').textContent=scoreTxt(s.minus);
+    document.getElementById('n12cPlus').textContent=scoreTxt(s.plus);
+    const deductionText=n12cSummaryDeduction(s,check.ok);
+    document.getElementById('n12cMinus').textContent=deductionText;
+    document.getElementById('n12cDeductionSummary').textContent=deductionText;
     document.getElementById('n12cReady').textContent=s.ready;document.getElementById('n12cPending').textContent=s.pending;
     const notice=document.getElementById('n12cTotalNotice');notice.className='complete '+(check.ok&&s.pending===0?'':'bad');
     notice.textContent=(check.ok&&s.pending===0?'✓ 可結算｜':'⚠ 暫算｜')+check.reason+(s.pending?' 尚有'+s.pending+'人資料不完整；請重新上傳010103／010105以讀取新增空機營收欄位。只列已知部分合計，缺值不視為0分。':'');
     const names=[...new Set(EXPECTED.map(p=>p.store))];
-    document.getElementById('n12cStoreTotals').innerHTML='<table><thead><tr><th>門市</th><th>完整／人數</th><th>單項加分</th><th>單項扣分</th><th>人員淨合計</th></tr></thead><tbody>'+names.map(name=>{const t=n12cTotals(rows.filter(x=>x.rec.store===name));return '<tr><td>'+esc(name)+'</td><td>'+t.ready+'/'+t.count+'</td><td>'+scoreTxt(t.plus)+'</td><td>'+scoreTxt(t.minus)+'</td><td>'+(!check.ok||t.pending?'暫算 ':'')+scoreTxt(t.net)+'</td></tr>';}).join('')+'</tbody></table>';
-    document.getElementById('n12cPersonTotals').innerHTML='<table><thead><tr><th>門市</th><th>姓名</th><th>員編</th><th>認列</th>'+ITEMS.map(k=>'<th>'+esc(k==='VK'?'V+K':k==='Apple服務'?'Apple服務／開通':k)+'</th>').join('')+'<th>SPE</th><th>狀態</th></tr></thead><tbody>'+rows.map(x=>'<tr><td>'+esc(x.rec.store)+'</td><td>'+esc(x.rec.name)+'</td><td>'+esc(x.rec.empId)+'</td><td>'+(x.manager?'店績':'個人')+'</td>'+x.ev.items.map(metricTd).join('')+'<td class="'+(x.ev.total<0?'score-neg':x.ev.total>0?'score-pos':'')+'">'+scoreTxt(x.ev.total)+'</td><td>'+(x.rec.missing?'人員未載入':x.ev.total==null?'待補資料':check.ok?'已重算':'暫算')+'</td></tr>').join('')+'</tbody></table>';
+    document.getElementById('n12cStoreTotals').innerHTML='<table><thead><tr><th>門市</th><th>完整／人數</th><th>單項加分</th><th>SPE總計扣分</th><th>人員淨合計</th></tr></thead><tbody>'+names.map(name=>{const t=n12cTotals(rows.filter(x=>x.rec.store===name));return '<tr><td>'+esc(name)+'</td><td>'+t.ready+'/'+t.count+'</td><td>'+scoreTxt(t.plus)+'</td><td class="n12c-deduction-cell">'+n12cSummaryDeduction(t,check.ok)+'</td><td>'+(!check.ok||t.pending?'暫算 ':'')+scoreTxt(t.net)+'</td></tr>';}).join('')+'</tbody></table>';
+    document.getElementById('n12cPersonTotals').innerHTML='<table><thead><tr><th>門市</th><th>姓名</th><th>員編</th><th>認列</th>'+ITEMS.map(k=>'<th>'+esc(k==='VK'?'V+K':k==='Apple服務'?'Apple服務／開通':k)+'</th>').join('')+'<th>SPE</th><th>狀態</th></tr></thead><tbody>'+rows.map(x=>'<tr><td>'+esc(x.rec.store)+'</td><td>'+esc(x.rec.name)+'</td><td>'+esc(x.rec.empId)+'</td><td>'+(x.manager?'店績':'個人')+'</td>'+x.ev.items.map(metricTd).join('')+n12cDeductionCell(x.ev)+'<td class="'+(x.ev.total<0?'score-neg':x.ev.total>0?'score-pos':'')+'">'+scoreTxt(x.ev.total)+'</td><td>'+(x.rec.missing?'人員未載入':x.ev.total==null?'待補資料':check.ok?'已重算':'暫算')+'</td></tr>').join('')+'</tbody></table>';
     // Reapply the metadata date after legacy render writes its single working date.
     const label='資料日：103 '+(n12cSourceMeta('103').date||'未確認')+'｜105 '+(n12cSourceMeta('105').date||'未確認');
     const e=document.getElementById('dataDate');if(e)e.textContent=label;

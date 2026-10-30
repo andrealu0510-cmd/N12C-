@@ -41,17 +41,17 @@ button{width:100%;margin-top:18px;padding:12px;border:0;border-radius:9px;backgr
     <button id="resetLogin" type="button">重設登入狀態（不刪報表）</button>
     <div class="note">登入後即可上傳010103／010105，店績、個人檢閱與一條龍7項SPE總分同步更新。沿用原瀏覽器已保存的報表；010508／010509維持獨立保險資料。</div>
     <div class="note"><a href="./review/" style="color:var(--blue);font-weight:800">開啟新版：每日 KPI 提醒與隱碼逐筆回報 →</a></div>
-    <div class="small">北一二C 固定管理網頁｜規則更新版 2026-10-30.1</div>
+    <div class="small">北一二C 固定管理網頁｜規則更新版 2026-10-30.2</div>
   </div>
 </div>
 
-<script src="./upgrade-v20261007.js?v=20261030-1"></script>
+<script src="./upgrade-v20261007.js?v=20261030-2"></script>
 <script>
 (function(){
 'use strict';
 const API = "https://zgpuuliqtrpdjerniyio.supabase.co/functions/v1/n12c-kpi-api";
 const TOKEN_KEY = "n12c_fixed_token_v1";
-const LOGIN_VERSION = "2026-10-30.1";
+const LOGIN_VERSION = "2026-10-30.2";
 const err = document.getElementById("err");
 const form = document.getElementById("loginForm");
 const loading = document.getElementById("loading");

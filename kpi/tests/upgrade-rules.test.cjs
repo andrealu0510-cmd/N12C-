@@ -10,7 +10,7 @@ const context = vm.createContext({window:{}, ITEMS, state, EXPECTED:[{store:'測
   n:v=>v==null||v===''?null:Number(String(v).replace(/[% ,]/g,'')),
   clean:v=>Math.round(v*10)/10, storeMap:()=>Object.fromEntries(state.stores.map(x=>[x.store,x])),
   pct:v=>v==null?'—':v+'%', structuredClone});
-const expose = ['score','evalStore','evalPerson','n12cRateColumns','n12cReadMetrics','metricClass','metricTd','n12cMetricRate','n12cTotals','n12cScoreRows'];
+const expose = ['score','evalStore','evalPerson','n12cRateColumns','n12cReadMetrics','metricClass','metricTd','n12cMetricRate','n12cTotals','n12cScoreRows','n12cDeduction','n12cDeductionText','n12cSummaryDeduction'];
 vm.runInContext(source.replace('window.n12cUpgradeHtml=upgradeHtml;', 'Object.assign(window,{'+expose.join(',')+'});window.n12cUpgradeHtml=upgradeHtml;'), context);
 context.rateN=v=>v==null||v===''?null:String(v).includes('%')?context.n(v):Number(v)<=3?Number(v)*100:Number(v);
 const app=context.window;
@@ -57,6 +57,28 @@ test('Legacy Apple/magazine source is counted once, and explicit missing Apple n
   metrics['Apple服務']=null;
   assert.equal(app.evalStore({metrics}).total,null);
 });
+test('Deduction totals are separate from bonuses and net SPE',()=>{
+  const ev=app.evalStore({metrics:{...Object.fromEntries(ITEMS.map(k=>[k,120])),配件:49}});
+  assert.equal(ev.total,.4);
+  assert.equal(app.n12cDeduction(ev),-.2);
+  assert.equal(app.n12cDeductionText(app.n12cDeduction(ev)),'扣 0.2 分');
+  const total=app.n12cTotals([{rec:{},ev}]);
+  assert.equal(total.minus,-.2);assert.equal(total.plus,.6);assert.equal(total.net,.4);
+  assert.equal(app.n12cSummaryDeduction(total,true),'扣 0.2 分');
+});
+test('Deduction summaries respect exemptions and incomplete people',()=>{
+  state.stores=[{store:'測試店',metrics:{...baseline(),配件:101}}];
+  const ev=app.evalPerson({store:'測試店',metrics:{...baseline(),配件:49,Netflix:69}});
+  assert.equal(app.n12cDeduction(ev),-.1);
+  const missing=app.evalStore({metrics:{...baseline(),包膜:null}});
+  assert.equal(app.n12cDeduction(missing),null);
+  assert.equal(app.n12cSummaryDeduction(app.n12cTotals([{rec:{},ev:missing}]),true),'待補資料');
+  const partial=app.n12cTotals([{rec:{},ev},{rec:{},ev:missing}]);
+  assert.equal(app.n12cSummaryDeduction(partial,true),'暫算 扣 0.1 分');
+  assert.equal(app.n12cSummaryDeduction(app.n12cTotals([{rec:{},ev}]),false),'暫算 扣 0.1 分');
+  assert.equal(app.n12cDeductionText(0),'扣 0.0 分');
+  state.stores=[];
+});
 function fixture(kind, offset=0){
   const labels=['MyVideo&KKBOX','Apple&Google服務及雜誌週刊開通數','HBO Max&Disney+&Prime Video銷售數','Netflix多享組銷售數','空機、3C、物聯網及門市購營收','配件及其他營收','包膜與保貼營收'];
   const header=Array(8+offset).fill(''),leaf=[...header],data=[...header];
@@ -88,13 +110,16 @@ if(process.env.N12C_TEMPLATE_PATH){
     const scripts=[...html.matchAll(/<script\b[^>]*>([\s\S]*?)<\/script>/gi)].map(m=>m[1]).filter(Boolean);
     for(const script of scripts)new vm.Script(script);
     assert.ok(html.includes('一條龍7項'));
+    assert.ok(html.includes('0.1 × 5項 ＋ 0.2 × 2項＝0.9分'));
+    assert.ok(html.includes('SPE總計扣分'));
+    assert.ok(!html.includes('${i.key} ${pct(i.rate)} (-0.1)'));
     assert.ok(!html.includes('附掛4項'));
     assert.ok(!html.includes('附掛6項'));
     assert.ok(!html.includes('規則：<100% -0.1'));
     const main=scripts.find(s=>s.includes('const ITEMS='));
     const declarations=main.slice(0,main.indexOf('\ndocument.querySelectorAll(".tab").forEach'));
     const live=vm.createContext({structuredClone,window:{}});
-    vm.runInContext(declarations.replace(/const EXPECTED=.*?;\n/, 'const EXPECTED=[{store:"測試店"}];\n'),live);
+    vm.runInContext(declarations.replace(/const EXPECTED=.*?;\n/, 'const EXPECTED=[{store:"測試店",empId:"TEST001",name:"測試員",role:"業務代表(I)"}];\n'),live);
     assert.equal(vm.runInContext('score(49,"配件")',live),-.2);
     assert.equal(vm.runInContext('ITEMS.length',live),7);
     for(const kind of ['103','105']) {
@@ -109,6 +134,17 @@ if(process.env.N12C_TEMPLATE_PATH){
     }
     // A current full template must use the new parser wrappers, not just show new copy.
     assert.ok(vm.runInContext('extractPeople.toString().includes("n12cReadMetrics")',live));
+    // Export must retain both signed gross deduction and net SPE values.
+    live.Blob=class {constructor(parts){live.csv=parts.join('');}};
+    live.URL={createObjectURL:()=> 'test:csv',revokeObjectURL:()=>{}};
+    live.setTimeout=fn=>fn();
+    live.document={createElement:()=>({click(){}})};
+    live.testMetrics={...Object.fromEntries(ITEMS.map(k=>[k,120])),配件:49};
+    vm.runInContext(`state={stores:[{store:'測試店',metrics:Object.fromEntries(ITEMS.map(k=>[k,100]))}],people:[{store:'測試店',empId:'TEST001',name:'測試員',role:'業務代表(I)',metrics:testMetrics}]};
+      n12cPeriodReady=()=>({ok:true});n12cSourceMeta=()=>({date:'2026/10/30'});n12cExportCsv();`,live);
+    const csvRows=live.csv.replace(/^\uFEFF/,'').split('\r\n').map(line=>line.match(/"([^"]|"")*"/g).map(cell=>cell.slice(1,-1)));
+    assert.equal(csvRows[1][csvRows[0].indexOf('SPE總計扣分')],'-0.2');
+    assert.equal(csvRows[1][csvRows[0].indexOf('SPE淨分')],'0.4');
     if(process.env.N12C_PREVIEW_PATH){
       const safe=html.replace(/const INITIAL=.*?;\nconst EXPECTED=.*?;\n/s,'const INITIAL={stores:[],people:[],date:"2026/10/30"};\nconst EXPECTED=[];\n');
       fs.writeFileSync(process.env.N12C_PREVIEW_PATH,safe);
