@@ -1,0 +1,22 @@
+<!doctype html><html lang="zh-Hant"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex,nofollow"><meta name="referrer" content="no-referrer"><title>北一二C｜11月台獎・九店與全區達成</title><link rel="stylesheet" href="november.css?v=1102-1"></head><body>
+<header><a href="../portal/">‹ 工作窗口</a><b>北一二C｜台獎工作台</b><a id="octoberLink" href="./?period=2026-10">10月報表</a><button id="logout" hidden>登出</button></header>
+<main>
+<section id="login" class="login"><small>2026年11月 · 11/02啟用</small><h1 id="loginTitle">門市閱讀版</h1><p>沿用原本閱讀密碼；管理員帳密維持不變。</p><form id="loginForm"><label id="employeeWrap" hidden>管理員員編<input id="employee" value="5512297" autocomplete="username"></label><label>密碼<div class="password"><input id="password" type="password" autocomplete="current-password" maxlength="128" required><button id="togglePassword" type="button">顯示</button></div></label><button id="loginSubmit" class="primary">登入11月看板</button><p id="loginError" class="error" role="alert"></p></form><a id="modeLink" href="?admin=1">管理員登入 →</a></section>
+<div id="workspace" hidden>
+<div class="toolbar"><div><b>九店＋北一二C｜一頁大字看板</b><span id="phase"></span></div><div class="tools"><button id="uploadButton" class="primary" hidden>STEP 1 上傳Excel</button><button id="exportButton">下載本頁4K PNG</button><button id="refreshButton">重讀共用資料</button></div></div>
+<p id="status" role="status"></p>
+<section id="board" aria-label="九店與全區獎金達成">
+<div class="boardhead"><div><small>2026 NOVEMBER · 台獎管理</small><h1>11月｜各店與全區達成</h1><p id="source"></p></div><div class="goal">每店基礎獎金管理目標<strong>$11,000</strong><small>非保證實領</small></div></div>
+<div class="boardbar"><label>機款範圍 <select id="modelSelect" aria-label="選擇查看機款"></select></label><span id="scopeNote"></span></div>
+<div id="largeTable" class="tablewrap"></div>
+<div class="boardfoot"><b>店長50%起｜督導80%起</b>　依每組實際達成率取最高已達級距；未達100%也有相應試算。<br><span id="basis"></span></div>
+</section>
+<a id="imageLink" hidden target="_blank" rel="noopener">開啟剛匯出的原圖（手機可長按儲存）</a>
+<section class="panel"><div class="sectionhead"><div><h2>逐組達成與獎金明細</h2><p>完成6／目標7＝85.7%；店長適用80%～未滿100%，不是0元。</p></div><select id="detailSelect" aria-label="選擇門市或全區"></select></div><div id="detailsTable" class="tablewrap"></div><div id="recommendation" class="notice"></div></section>
+<details class="panel"><summary>Excel原表對帳｜不被機款試算取代</summary><p>原表實際總獎金、月末推估總獎金、排名與Y／N照原值。上方僅選定11組，不含其餘競賽組、空機及排名權數。</p><div id="rawTable" class="tablewrap"></div></details>
+<details class="panel"><summary>暫估目標與11月分組規則</summary><div id="assumptions"></div><p>11/02是本看板啟用日；上傳採11月月累計，包含11/01有效上線。每組目標先借10月，不把10月實績搬進11月。</p><button id="backupButton" hidden>備份本月資料</button></details>
+<p class="legal">僅供內部管理｜資料保存於共用服務。每日仍由管理員上傳來源Excel；網站不會自行連線公司系統取檔。畫面約30秒檢查更新。</p>
+</div></main>
+<input id="fileInput" type="file" accept=".xlsx,.xlsm,.csv,.tsv,.txt" hidden>
+<dialog id="importDialog"><div class="sectionhead"><h2>STEP 2｜核對後發布11月</h2><button id="cancelImport">關閉 ×</button></div><p id="filename"></p><label>來源頁籤<select id="sheetSelect"></select></label><div id="preview" class="tablewrap"></div><p id="importWarnings"></p><label>報表截至日<input id="reportDate" type="date" min="2026-11-01" max="2026-11-30"></label><label class="check"><input id="useTargets" type="checkbox" checked>採用Excel內目標數，取代對應的暫估目標。</label><label class="check"><input id="ack" type="checkbox">已確認月份、門市及月累計。空白保持未提供，不當成0；確認後同步門市。</label><p id="publishMessage" class="error" role="alert"></p><button id="publishButton" class="primary" disabled>確認更新並發布</button></dialog>
+<script src="parser.js?v=1013-1"></script><script src="november-core.js?v=1102-1"></script><script src="november-ui.js?v=1102-1"></script></body></html>
