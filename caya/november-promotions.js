@@ -38,7 +38,7 @@
   function openSource(id){const s=bundle.pack.sources.find(s=>s.id===id);if(!s)return;let d=document.getElementById('novemberSourceDialog');if(!d){d=document.createElement('dialog');d.id='novemberSourceDialog';d.innerHTML='<div class="cardhead"><h2></h2><button type="button" data-nov-close>關閉</button></div><pre style="white-space:pre-wrap;overflow-wrap:anywhere;padding:20px;font:15px/1.8 system-ui"></pre>';document.body.append(d);d.querySelector('button').onclick=()=>d.close();}d.querySelector('h2').textContent=s.title;d.querySelector('pre').textContent=s.text;d.showModal();}
   function openLookup(){window.activate('november');document.getElementById('cayaClose')?.click();}
   function finish(){
-   const originalActivate=window.activate;window.activate=function(tab){if(tab==='november'){document.querySelectorAll('.pane').forEach(p=>p.classList.toggle('active',p.id==='pane-november'));document.querySelectorAll('.nav button').forEach(p=>p.classList.toggle('active',p.dataset.tab===tab));document.getElementById('ratePanel').hidden=true;let f=document.getElementById('novemberLookupFrame');if(!f.dataset.loaded){f.srcdoc=bundle.lookupHtml;f.dataset.loaded='true';}}else originalActivate(tab);};
+   const originalActivate=window.activate;window.activate=function(tab){if(tab==='promos')tab='november';if(tab==='november'){document.querySelectorAll('.pane').forEach(p=>p.classList.toggle('active',p.id==='pane-november'));document.querySelectorAll('.nav button').forEach(p=>p.classList.toggle('active',p.dataset.tab===tab));document.getElementById('ratePanel').hidden=true;let f=document.getElementById('novemberLookupFrame');if(!f.dataset.loaded){f.srcdoc=bundle.lookupHtml;f.dataset.loaded='true';}}else originalActivate(tab);};
    document.querySelector('[data-tab="november"]').addEventListener('click',()=>window.activate('november'));
    document.addEventListener('click',e=>{if(e.target.closest('[data-nov-open]'))openLookup();});
   }
@@ -62,6 +62,7 @@
    }
    if(code.includes('function ruleCard(e){')){
     code=swap(code,'function ruleCard(e){','function ruleCard(e){if(pack.referenceOnly)return window.cayaNovember.ruleCard(e.rule.novModel,e.rule.novOffer,getContext());');
+    code=swap(code,'function promotionText(){',"function promotionText(){if(pack.referenceOnly)return '【11月促案參考・原表價格未再扣優惠】\\n'+$('promotionPanel').innerText;");
     code=swap(code,'function openSource(id){','function openSource(id){if(pack.referenceOnly){window.cayaNovember.openSource(id);return;}');
     code=swap(code,"$('promoSourceLibrary').innerHTML=pack.sources.map(s=>", "$('promoSourceLibrary').innerHTML=pack.referenceOnly?'<p>完整原表與逐項對照已收錄於11月促案快查。</p><button type=\"button\" data-nov-open>開啟11月完整規則</button>':pack.sources.map(s=>");
    }
@@ -78,7 +79,7 @@
   doc.getElementById('promoDate').setAttribute('value','2026-11-01');
   doc.getElementById('promotionHeading').previousElementSibling.textContent='2026 NOVEMBER · PROMOTION CHECK';
   const nav=doc.querySelector('#nav'),button=doc.createElement('button');button.type='button';button.dataset.tab='november';button.innerHTML='<span>★</span>11月促案快查';nav.insertBefore(button,nav.querySelector('[data-tab="promos"]'));
-  const oldNav=nav.querySelector('[data-tab="promos"]');oldNav.innerHTML='<span>07</span>11月促案規則庫';
+  const oldNav=nav.querySelector('[data-tab="promos"]');oldNav.hidden=true;oldNav.innerHTML='<span>07</span>11月促案規則庫';
   const pane=doc.createElement('section');pane.id='pane-november';pane.className='pane';pane.innerHTML='<iframe id="novemberLookupFrame" title="11月促案機型快查" sandbox="allow-scripts allow-same-origin allow-downloads allow-modals" style="width:100%;height:calc(100dvh - 160px);min-height:650px;border:0;border-radius:16px;background:#fff"></iframe>';doc.querySelector('.workspace').append(pane);
   const style=doc.createElement('style');style.textContent='.nov-offer p{font-size:14px;line-height:1.8}.nov-combo{padding:10px;margin:8px 0;background:#edf5f2;border-radius:8px}.nov-unmatched{opacity:.65}.nov-status{color:#9e3535}#novemberSourceDialog{width:min(950px,94vw);max-height:90dvh;border:1px solid #abc9c1;border-radius:14px}#promotionPanel>.cardbody>.promo-context,#promotionPanel .promo-eligibility,#promotionPanel .promo-stack-expand,#promoCombos,#promoImportant,#clearPromoCustomer{display:none!important}';doc.head.append(style);
   const note=doc.querySelector('#promotionPanel .promo-safe-note');if(note)note.textContent='11月促案參考表：以下列出單項折價、適用條件與原表組合總額；價格表數字不自動再扣優惠。';
