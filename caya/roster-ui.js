@@ -17,7 +17,7 @@
  const create=document.getElementById('createAccount');if(create)create.textContent='開通同仁';
  const headings=document.querySelectorAll('#accountsDialog .two h3');if(headings[0])headings[0].textContent='限定登入名單';if(headings[1])headings[1].textContent='開通／重設同仁密碼';
  const loginNote=document.querySelector('#loginView .note');if(loginNote)loginNote.textContent='僅限核准名單登入。列入名單後，仍須先設定密碼；英文字母可直接輸入。';
- const version=document.querySelector('#loginView .login-card>small');if(version)version.textContent='v6.6 · 限定名單登入／英數員編／各版本分欄查價';
+ const version=document.querySelector('#loginView .login-card>small');if(version)version.textContent='v6.7 · 11月促案快查／英數員編／各版本分欄查價';
  const warning=document.querySelector('#accountForm p.muted');if(warning)warning.textContent='僅能開通名單內的員編。待開通者須先設定密碼；同仁密碼須與管理員不同。';
  let members=new Map();
  const accountId=document.getElementById('accountId');
