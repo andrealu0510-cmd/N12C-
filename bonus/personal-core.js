@@ -32,7 +32,7 @@ function leaderboardFromSheet(sheet){
  const rows=sheet.rows||[];let h=-1,actual=-1,projected=-1,rank=-1,eligible=-1;const rankTiers=[],thresholds={first:5000,second:9000};
  for(let r=0;r<Math.min(rows.length,20);r++){const row=rows[r]||[];const joined=row.map(x=>String(raw(x)??'')).join(' ');
   const a=row.findIndex(x=>nrm(x)==='實際總獎金'),p=row.findIndex(x=>nrm(x).startsWith('推估原始總獎金')),k=row.findIndex(x=>nrm(x)==='排名'),y=row.findIndex(x=>nrm(x)==='yn'||nrm(x).startsWith('領獎與否'));
-  if(a>=0&&p>=0&&k>=0){h=r;actual=a;projected=p;rank=k;eligible=y;const prev=rows[Math.max(0,r-1)]||[];for(let c=0;c<4;c++)if(String(raw(prev[c])??'').trim())rankTiers.push(String(raw(prev[c])).trim());}
+  if(a>=0&&p>=0&&k>=0){h=r;actual=a;projected=p;rank=k;eligible=y;for(let c=0;c<4;c++)if(String(raw(row[c])??'').trim())rankTiers.push(String(raw(row[c])).trim());}
   const m1=joined.match(/第一檻\$?\s*([\d,]+)/),m2=joined.match(/第二檻\$?\s*([\d,]+)/);if(m1)thresholds.first=Number(m1[1].replace(/,/g,''));if(m2)thresholds.second=Number(m2[1].replace(/,/g,''));
  }
  if(h<0)return null;const list=[];
@@ -42,7 +42,7 @@ function leaderboardFromSheet(sheet){
 function parseRaw(sheet,config,storeDefs){
  const rows=sheet.rows||[],errors=[],warnings=[];let header=-1,descs=[],subEnd=-1,identityCols=null,summaryCols=null;
  for(let r=0;r<Math.min(rows.length,30);r++){const row=rows[r]||[],heads=[];row.forEach((v,c)=>{const s=String(raw(v)??'').normalize('NFKC').replace(/\s/g,'');if(/^(上線數|空機數)_?\d+_/i.test(s)){const id=modelHit(v,config);if(id)heads.push({c,id,kind:nrm(v).startsWith('上線數')?'online':'empty'});}});
-  if(heads.length>=5){header=r;descs=[];for(let k=0;k<heads.length;k++){const hd=heads[k],end=heads[k+1]?.c??row.length;let a=-1,t=-1,rate=-1;for(let rr=r+1;rr<=Math.min(r+5,rows.length-1);rr++){const sub=rows[rr]||[];if(sub.some(v=>/^上線數|^空機數/i.test(String(raw(v)??'').trim())))break;for(let c=hd.c;c<end;c++){const s=nrm(sub[c]);if(s==='實際數'&&a<0)a=c;if((s==='店目標數'||s==='目標數')&&t<0)t=c;if((s==='店推估達成率'||s==='推估達成率')&&rate<0)rate=c;}subEnd=Math.max(subEnd,rr);}if(a>=0)descs.push({...hd,a,t,rate});}
+  if(heads.length>=5){header=r;descs=[];for(let k=0;k<heads.length;k++){const hd=heads[k],end=heads[k+1]?.c??row.length;let a=-1,t=-1,rate=-1;for(let rr=r+1;rr<=Math.min(r+5,rows.length-1);rr++){const sub=rows[rr]||[];if(sub.some(v=>/^上線數|^空機數/i.test(String(raw(v)??'').trim())))break;for(let c=hd.c;c<end;c++){const s=nrm(sub[c]);if(s==='實際數'&&a<0)a=c;if((s==='店目標數'||s==='目標數')&&t<0)t=c;if((s==='店推估達成率'||s==='推估達成率')&&rate<0)rate=c;}if(a>=0){subEnd=Math.max(subEnd,rr);break;}}if(a>=0)descs.push({...hd,a,t,rate});}
    break;}
  }
  if(header<0)throw Error('找不到「手機競賽 個人上線數＆空機數」資料結構。');
