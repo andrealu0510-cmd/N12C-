@@ -621,7 +621,7 @@ function profileBasisEvidence(header, definitions, mapping, rows, dateInfo, warn
     const metric = mapping.metrics[def.key], block = header.profileBlocks.find(b => b.column === metric?.actual?.column);
     const values = rows.map(r => r.metrics[def.key]).filter(Boolean);
     def.active = values.some(m => Number.isFinite(m.progress) || Number.isFinite(m.achievement) || (Number.isFinite(m.target) && m.target > 0));
-    def.reminderEligible = def.active && def.progressKind !== 'ratio';
+    def.reminderEligible = def.active && def.progressKind !== 'ratio' && values.some(m => (Number.isFinite(m.target) && m.target > 0) || (m.target == null && (Number.isFinite(m.progress) || Number.isFinite(m.achievement))));
     const isReverseOrAdjustment = /自退|解約後\s*NP\s*OUT/i.test(def.sourceLabel) || block?.section === '加減分項目';
     const metricSamples = samplesFor([def.key]);
     const metricCounts = summary(metricSamples);

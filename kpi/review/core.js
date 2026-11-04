@@ -43,7 +43,7 @@ export function validateSnapshot(s){
   if(!object(d)||typeof d.key!=='string'||!/^[A-Za-z0-9_-]{1,100}$/.test(d.key)||typeof d.label!=='string'||!d.label.trim()||d.label.length>200){errors.push('KPI 項目名稱或代碼格式不正確。');continue;}
   if(metricKeys.has(d.key))errors.push('KPI 項目代碼重複。');metricKeys.add(d.key);
   if(typeof d.unit!=='string'||!d.unit.trim()||d.unit.length>20||d.unit==='未確認')errors.push('請確認每個 KPI 的單位。');
-  if(!['month','monthly','toDate','todate','to-date'].includes(d.targetBasis))errors.push('請確認各 KPI 的目標基準。');
+  if(!(d.targetBasis==='source-only'&&d.calculation==='source-only'&&d.reminderEligible===false)&&!['month','monthly','toDate','todate','to-date'].includes(d.targetBasis))errors.push('請確認各 KPI 的目標基準。');
  }
  const ids=new Set();
  for(const e of rows){
@@ -54,8 +54,9 @@ export function validateSnapshot(s){
   if(e.rank!=null&&(!Number.isSafeInteger(e.rank)||e.rank<1))errors.push('排名必須是正整數。');
   for(const key of ['overallProgress','overallAchievement'])if(e[key]!=null&&(!finite(e[key])||e[key]<0))errors.push('總進度／總達成百分比不正確。');
   if(!object(e.metrics)){errors.push('人員 KPI 資料格式不正確。');continue;}
-  for(const d of definitions){if(!object(d))continue;const m=e.metrics[d.key];if(m==null)continue;if(!object(m)){errors.push('KPI 欄位格式不正確。');continue;}if(m.targetBasis!=null&&!['month','monthly','toDate','todate','to-date'].includes(m.targetBasis))errors.push('請確認各 KPI 的目標基準。');for(const key of ['actual','target','progress','achievement'])if(m[key]!=null&&(!finite(m[key])||m[key]<0))errors.push('KPI 數據有負值或非數字，請核對原報表。');}
+  for(const d of definitions){if(!object(d))continue;const m=e.metrics[d.key];if(m==null)continue;if(!object(m)){errors.push('KPI 欄位格式不正確。');continue;}if(m.targetBasis!=null&&!(m.targetBasis==='source-only'&&d.targetBasis==='source-only'&&d.calculation==='source-only'&&d.reminderEligible===false)&&!['month','monthly','toDate','todate','to-date'].includes(m.targetBasis))errors.push('請確認各 KPI 的目標基準。');for(const key of ['actual','target','progress','achievement'])if(m[key]!=null&&(!finite(m[key])||m[key]<0))errors.push('KPI 數據有負值或非數字，請核對原報表。');}
  }
  return[...new Set(errors)];
 }
 export function demoSnapshot(){const defs=[{key:'a999',label:'A999',sourceLabel:'AQ V+D 999（含）以上',unit:'筆'},{key:'r999',label:'R999',sourceLabel:'RT V+D 999（含）以上',unit:'筆'},{key:'r1399',label:'R1399',sourceLabel:'RT V+D 1399（含）以上',unit:'筆'},{key:'broadband',label:'寬頻',sourceLabel:'好速業績點數',unit:'點'},{key:'accessories',label:'配件',sourceLabel:'配件銷售金額',unit:'元'},{key:'film',label:'包膜',sourceLabel:'包膜業績',unit:'元'},{key:'netflix',label:'Netflix',sourceLabel:'Netflix',unit:'筆'}];const people=[['示範一店','同仁甲',960,62.4],['示範一店','同仁乙',830,74.8],['示範二店','同仁丙',725,81.3],['示範二店','同仁丁',680,89.6],['示範三店','同仁戊',521,96.2],['示範三店','同仁己',405,104.8],['示範四店','同仁庚',276,117.5],['示範四店','同仁辛',128,136.2]];return{id:'demo',cutoffDate:'2026-10-21',sourceName:'示範資料・非實際績效',metricDefinitions:defs.map(d=>({...d,targetBasis:"monthly"})),selectedMetricKeys:DEFAULT_KEYS,rule:'overall_and_metric',rows:people.map(([store,name,rank,overallProgress],i)=>({employeeId:'DEMO'+String(i+1).padStart(3,'0'),store,name,job:'業務代表',rank,overallProgress,metrics:Object.fromEntries(defs.map((d,j)=>{const target=j===3?7:j===4?12000:j===5?8000:8+j*5;const actual=j>3&&j<6?Math.round(target*(.25+i*.06+j*.01)/100)*100:Math.floor(target*(.26+i*.07+j*.015));return[d.key,{actual,target}];}))}))};}
+

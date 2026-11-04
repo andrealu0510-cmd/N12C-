@@ -7,7 +7,7 @@ const sessions=createSessionStore({sessionStorage:()=>window.sessionStorage,loca
 const $=id=>document.getElementById(id);
 const activeToken=()=>{try{return sessionStorage.getItem(SESSION_KEY);}catch{return null;}};
 sessions.restore();
-await import('./app.js?v=20261104-zero-target-1');
+await import('./app.js?v=20261104-source-only-2');
 
 // Keep the proven parser, validation and server authorization unchanged. This
 // small entry module adapts their UI lifecycle; the server still verifies access.
@@ -107,6 +107,6 @@ await import('./staff-entry.js?v=20261022-staff-entry-1');
 // Store visibility is verified by a read-only service; individual report permissions are unchanged.
 await import('./store-progress.js?v=20261022-store-read-1');
 // Separate store report storage; never replaces employee snapshots or reports.
-await import('./store-hierarchy.js?v=20261022-store-parser-2');
+await import('./store-hierarchy.js?v=20261104-source-only-2');
 // Route store reports to their existing, separately authorized cloud endpoint.
 await import('./upload-router.js?v=20261031-upload-routing-1');

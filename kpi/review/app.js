@@ -1,5 +1,6 @@
-import {DEFAULT_KEYS,DEFAULT_STORES,RULES,escapeHtml as esc,finite,taipeiDate,validDate,period,metricValue,needsReport,numeric,percent,statusClass,sortPeople,validateSnapshot,demoSnapshot} from './core.js';
-import {inspectWorkbook,parseSheet} from './parser.js?v=20261104-zero-target-1';
+import {sourceOnlyImport,importDefinitions,SOURCE_ONLY_NOTICE} from './import-policy.js?v=20261104-source-only-2';
+import {DEFAULT_KEYS,DEFAULT_STORES,RULES,escapeHtml as esc,finite,taipeiDate,validDate,period,metricValue,needsReport,numeric,percent,statusClass,sortPeople,validateSnapshot,demoSnapshot} from './core.js?v=20261104-source-only-2';
+import {inspectWorkbook,parseSheet} from './parser.js?v=20261104-source-only-2';
 import {readReportFile,readReportText} from './import-source.js';
 import {validateReport} from './validation.js';
 import {mountReport,makeEmptyReport,renderReportPrint,renderContactsPrint} from './report-ui.js';
@@ -62,7 +63,7 @@ function tableMarkup(rows,definitions,exporting=false){
  const cols=definitions.map(d=>d.progressKind==='ratio'?'<th>分子件數</th><th>分母件數</th><th>差額</th><th>原表比例</th>':'<th>實績</th><th>目標</th><th>進度差額</th><th>進度達成</th>').join('');
  return '<table class="kpi-table"><thead><tr><th rowspan="2" class="group">原表<br>排名</th><th rowspan="2" class="group">店點</th><th rowspan="2" class="group">同仁／員編</th><th rowspan="2" class="group overall-head">總進度</th>'+groups+(!exporting?'<th rowspan="2" class="group">回報</th>':'')+'</tr><tr>'+cols+'</tr></thead><tbody>'+rows.map(e=>'<tr><td class="rank-cell">'+numeric(e.rank,0)+'</td><td class="store-cell">'+esc(e.store)+'</td><td class="person-cell"><strong>'+esc(e.name)+'</strong><small>'+esc(e.employeeId)+' · '+esc(e.job||'')+'</small></td><td><span class="rate-pill '+statusClass(e.overallProgress)+'">'+percent(e.overallProgress)+'</span></td>'+definitions.map(d=>{const m=metricValue(e,d,state.snapshot.cutoffDate);const gap=m.gap;return'<td>'+numeric(m.actual)+'</td><td>'+numeric(m.target)+'</td><td class="'+(gap>0?'danger-text':gap<0?'good-text':'')+'">'+(finite(gap)?(gap>0?'+':'')+numeric(gap):d.calculation==='source-only'?'依原表':'—')+'</td><td class="group-last"><span class="rate-pill '+(d.reminderEligible===false?'muted':statusClass(m.progress))+'" title="'+esc(m.progressSource)+'">'+percent(m.progress)+'</span></td>';}).join('')+(!exporting?'<td>'+(eligible(e)?'<button class="row-action" data-open-report="'+esc(e.employeeId)+'">需回報</button>':'<span class="muted">—</span>')+'</td>':'')+'</tr>').join('')+'</tbody></table>';
 }
-function renderDashboard(){const page=pageRows();renderSummary();$('dashboardTable').innerHTML=tableMarkup(page.rows,selectedDefs());$('pageInfo').textContent=state.page+' / '+page.pages+' 頁 · '+page.total+' 人';$('prevPage').disabled=state.page<=1;$('nextPage').disabled=state.page>=page.pages;$('captureDashboard').disabled=!page.rows.length||!state.keys.length;$('printDashboard').disabled=!page.rows.length||!state.keys.length;$('sourceInfo').textContent='截止日 '+(state.snapshot.cutoffDate||'未確認')+' · '+state.snapshot.sourceName+(state.snapshot.rows.length&&!state.snapshot.rows.some(e=>finite(e.rank))?' · 原表排名未辨識':'');$('rule').value=state.rule;}
+function renderDashboard(){const page=pageRows();renderSummary();$('dashboardTable').innerHTML=tableMarkup(page.rows,selectedDefs());$('pageInfo').textContent=state.page+' / '+page.pages+' 頁 · '+page.total+' 人';$('prevPage').disabled=state.page<=1;$('nextPage').disabled=state.page>=page.pages;$('captureDashboard').disabled=!page.rows.length||!state.keys.length;$('printDashboard').disabled=!page.rows.length||!state.keys.length;$('sourceInfo').textContent='截止日 '+(state.snapshot.cutoffDate||'未確認')+' · '+state.snapshot.sourceName+(defs().some(d=>d.targetBasis==='source-only')?' · '+SOURCE_ONLY_NOTICE:'')+(state.snapshot.rows.length&&!state.snapshot.rows.some(e=>finite(e.rank))?' · 原表排名未辨識':'');$('rule').value=state.rule;}
 function render(){syncMode();renderPeriod();renderMetrics();renderDashboard();}
 function changeSelection(keys){state.keys=[...new Set(keys)].filter(k=>defs().some(d=>d.key===k));state.page=1;prefs.selected=state.keys;persistPrefs();renderMetrics();renderDashboard();if(state.tab==='reports'&&!state.dirty)populatePeople();}
 async function bootstrap(){const data=await api('bootstrap');state.mode='live';state.user=data.user;state.snapshot=data.snapshot||blankSnapshot();state.history=data.history||[];const settings=data.settings||data.snapshot||{};state.keys=settings.selectedMetricKeys?.length?settings.selectedMetricKeys:prefs.selected?.length?prefs.selected:DEFAULT_KEYS;state.rule=settings.rule||'overall_and_metric';state.store='';state.page=1;render();if(state.user.role==='staff'){state.keys=state.keys.filter(k=>defs().some(d=>d.key===k));if(!state.keys.length)state.keys=defs().slice(0,4).map(d=>d.key);render();await switchTab('reminders');await refreshReadStatus();if(state.user.mustChangePassword)$('passwordDialog').showModal();}}
@@ -124,6 +125,8 @@ function parseImport(mapping,reset=false){
    else if(evidence?.basis==='toDate')$('targetBasis').value='toDate';
    else if(basis.length&&basis.every(b=>['month','monthly'].includes(b)))$('targetBasis').value='monthly';
    else if(basis.length&&basis.every(b=>b==='toDate'))$('targetBasis').value='toDate';
+   else if(sourceOnlyImport(parsed))$('targetBasis').value='source-only';
+   else $('targetBasis').value='';
  }
  state.mappingReady=false;state.mappingDirty=false;$('mappingUI').innerHTML='';
  if($('mappingDetails').open)renderMapping(parsed);
@@ -165,6 +168,8 @@ function renderImportPreview(){
  if(!p)messages.push('<p>尚需確認：資料截止日。</p>');
  else if($('cutoffDate').value>taipeiDate())messages.push('<p>資料截止日不能晚於今天。</p>');
  if(valid&&!$('targetBasis').value)messages.push('<p>尚需確認：下方「資料日期與計算方式」中的目標基準。</p>');
+ if($('targetBasis').value==='source-only')messages.push('<p><strong>'+esc(SOURCE_ONLY_NOTICE)+'</strong></p>');
+ if(parsed.warnings.some(w=>w.code==='ZERO_TARGET'))messages.push('<p>原報表部分目標為0，實績照常保留；不自行補入目標，未有有效目標的項目僅供參考。</p>');
  const references=parsed.metricDefinitions.filter(d=>d.reminderEligible===false).length;
  if(references)messages.push('<p>'+references+' 個參考項目可選取顯示，不套用 80%／100% 的落後回報門檻。</p>');
  $('importMessages').innerHTML=messages.join('');
@@ -225,7 +230,7 @@ async function publishImport(){
  state.parsed=result;
  if(importProblems().length){renderImportPreview();$('importStatus').textContent='資料仍有缺漏或格式問題，尚未發布。';return;}
  const basis=$('targetBasis').value;
- const metricDefinitions=result.metricDefinitions.map(d=>({...d,targetBasis:state.importBasisEdited?basis:d.targetBasis&&d.targetBasis!=='unknown'?d.targetBasis:basis}));
+ const metricDefinitions=importDefinitions(result,basis,state.importBasisEdited);
  if(metricDefinitions.some(d=>!d.unit||/未確認/.test(d.unit))){$('importStatus').textContent='仍有項目單位未辨識，尚未發布。';return;}
  const rows=importRows().map(e=>({...e,metrics:Object.fromEntries(metricDefinitions.map(d=>[d.key,{...e.metrics[d.key],targetBasis:d.targetBasis}]))}));
  const snapshot={cutoffDate:date,sourceName:state.importName,sheetName:$('sheetSelect').value,metricDefinitions,rows,selectedMetricKeys:state.importKeys.filter(k=>metricDefinitions.some(d=>d.key===k)),rule:state.rule,importNotes:result.warnings.map(w=>w.message)};
@@ -325,3 +330,4 @@ $('passwordForm').onsubmit=async e=>{e.preventDefault();const fd=new FormData(e.
 
 async function init(){render();const access=new URLSearchParams(location.hash.slice(1)).get('access');if(access){setSession('staff:'+access);history.replaceState(null,'',location.pathname+location.search);}else{try{state.token=sessionStorage.getItem(SESSION);if(!state.token){const old=localStorage.getItem('n12c_fixed_token_v1');if(old)state.token='admin:'+old;}}catch{}}if(state.token){try{await bootstrap();}catch(error){setSession(null);if(access){state.mode='live';state.user={role:'staff',employeeId:''};state.snapshot=blankSnapshot();render();info('個人連結無法使用','<p>'+esc(error.message)+'</p>');}else caught(error);}}}
 init();
+
