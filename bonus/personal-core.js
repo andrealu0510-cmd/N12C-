@@ -28,16 +28,26 @@ function detectPeriod(sheets,filename=''){
  scan(filename);for(const sh of sheets)for(let r=0;r<Math.min(12,sh.rows.length);r++)scan((sh.rows[r]||[]).map(x=>String(raw(x)??'')).join(' '));
  return [...set];
 }
+function summaryColumns(row){
+ const vals=(row||[]).map(nrm);
+ const actual=vals.findIndex(x=>x==='實際總獎金'||x==='實際獎金'||x.includes('實際總獎金'));
+ const projected=vals.findIndex(x=>x.startsWith('推估原始總獎金')||x.includes('推估原始總獎金')||x==='推估總獎金'||x.includes('推估總獎金'));
+ const rank=vals.findIndex(x=>x==='排名'||x==='名次');
+ const eligible=vals.findIndex(x=>x==='yn'||x==='y/n'||x.startsWith('領獎與否')||x.includes('領獎與否'));
+ return actual>=0&&projected>=0&&rank>=0?{actual,projected,rank,eligible}:null;
+}
 function leaderboardFromSheet(sheet){
- const rows=sheet.rows||[];let h=-1,actual=-1,projected=-1,rank=-1,eligible=-1;const rankTiers=[],thresholds={first:5000,second:9000};
- for(let r=0;r<Math.min(rows.length,20);r++){const row=rows[r]||[];const joined=row.map(x=>String(raw(x)??'')).join(' ');
-  const a=row.findIndex(x=>nrm(x)==='實際總獎金'),p=row.findIndex(x=>nrm(x).startsWith('推估原始總獎金')),k=row.findIndex(x=>nrm(x)==='排名'),y=row.findIndex(x=>nrm(x)==='yn'||nrm(x).startsWith('領獎與否'));
-  if(a>=0&&p>=0&&k>=0){h=r;actual=a;projected=p;rank=k;eligible=y;for(let c=0;c<4;c++)if(String(raw(row[c])??'').trim())rankTiers.push(String(raw(row[c])).trim());}
-  const m1=joined.match(/第一檻\$?\s*([\d,]+)/),m2=joined.match(/第二檻\$?\s*([\d,]+)/);if(m1)thresholds.first=Number(m1[1].replace(/,/g,''));if(m2)thresholds.second=Number(m2[1].replace(/,/g,''));
+ const rows=sheet.rows||[];let h=-1,cols=null;const rankTiers=[],thresholds={first:5000,second:9000};
+ for(let r=0;r<Math.min(rows.length,100);r++){const row=rows[r]||[],joined=row.map(x=>String(raw(x)??'')).join(' '),found=summaryColumns(row);
+  if(found&&h<0){h=r;cols=found;const tierRows=[rows[Math.max(0,r-1)]||[],row];for(const tr of tierRows){for(let q=0;q<Math.min(4,tr.length);q++){const v=String(raw(tr[q])??'').trim();if(v&&!rankTiers.includes(v))rankTiers.push(v);}}}
+  const m1=joined.match(/第一檻[^\d]*([\d,]+)/),m2=joined.match(/第二檻[^\d]*([\d,]+)/);if(m1)thresholds.first=Number(m1[1].replace(/,/g,''));if(m2)thresholds.second=Number(m2[1].replace(/,/g,''));
  }
- if(h<0)return null;const list=[];
- for(let r=h+1;r<rows.length;r++){const row=rows[r]||[],id=String(raw(row[2])??'').trim();if(!empId(id))continue;const ab=number(row[actual]),pb=number(row[projected]),rk=number(row[rank],true),yn=eligible>=0?String(raw(row[eligible])??'').trim().toUpperCase():'';list.push({store:String(raw(row[0])??'').trim(),title:String(raw(row[1])??'').trim(),employeeId:id,name:String(raw(row[3])??'').trim(),actualBonus:ab,projectedBonus:pb,rank:rk,eligible:['Y','N'].includes(yn)?yn:null});}
- return {leaderboard:list,thresholds,rankTiers};
+ if(h<0||!cols)return null;const list=[];
+ for(let r=h+1;r<rows.length;r++){const row=rows[r]||[],ec=row.findIndex(empId);if(ec<0)continue;const id=String(raw(row[ec])??'').trim(),ab=number(row[cols.actual]),pb=number(row[cols.projected]),rk=number(row[cols.rank],true),yn=cols.eligible>=0?String(raw(row[cols.eligible])??'').trim().toUpperCase():'';
+  const store=String(raw(row[Math.max(0,ec-2)])??'').trim(),title=String(raw(row[Math.max(0,ec-1)])??'').trim(),person=String(raw(row[ec+1])??'').trim();
+  list.push({store,title,employeeId:id,name:person,actualBonus:ab,projectedBonus:pb,rank:rk,eligible:['Y','N'].includes(yn)?yn:null});
+ }
+ return {leaderboard:list,thresholds,rankTiers:rankTiers.slice(0,8)};
 }
 function parseRaw(sheet,config,storeDefs){
  const rows=sheet.rows||[],errors=[],warnings=[];let header=-1,descs=[],subEnd=-1,identityCols=null,summaryCols=null;
@@ -48,7 +58,7 @@ function parseRaw(sheet,config,storeDefs){
  if(header<0)throw Error('找不到「手機競賽 個人上線數＆空機數」資料結構。');
  for(let r=subEnd+1;r<rows.length;r++){const row=rows[r]||[];const cc=row.findIndex(code),ec=row.findIndex(empId);if(cc>=0&&ec>=0){identityCols={code:cc,store:cc+1,title:ec-1,employee:ec,name:ec+1,tenure:ec+2};break;}}
  if(!identityCols)throw Error('找不到門市代碼／員編欄位。');
- for(let r=Math.max(0,header-1);r<=Math.min(header+6,rows.length-1);r++){const row=rows[r]||[];const a=row.findIndex(x=>nrm(x)==='實際總獎金'),p=row.findIndex(x=>nrm(x).startsWith('推估原始總獎金')),k=row.findIndex(x=>nrm(x)==='排名'),y=row.findIndex(x=>nrm(x).startsWith('領獎與否'));if(a>=0&&p>=0&&k>=0)summaryCols={actual:a,projected:p,rank:k,eligible:y};}
+ for(let r=0;r<=Math.min(Math.max(subEnd,header+8),rows.length-1);r++){const found=summaryColumns(rows[r]||[]);if(found){summaryCols=found;break;}}
  const byId=new Map(),fallback=[];for(let r=subEnd+1;r<rows.length;r++){const row=rows[r]||[],id=String(raw(row[identityCols.employee])??'').trim();if(!empId(id))continue;const storeCode=String(raw(row[identityCols.code])??'').trim(),store=String(raw(row[identityCols.store])??'').trim(),title=String(raw(row[identityCols.title])??'').trim(),person=String(raw(row[identityCols.name])??'').trim();const online={},empty={};
   for(const d of descs){const v=number(row[d.a],true);if(v===null)continue;const box=d.kind==='online'?online:empty;box[d.id]=(box[d.id]||0)+v;}
   const e={storeCode,store,title,employeeId:id,name:person,online,empty};byId.set(id,e);
@@ -61,13 +71,13 @@ function parseRaw(sheet,config,storeDefs){
 }
 function parseWorkbook(sheets,config,storeDefs,filename=''){
  const periods=detectPeriod(sheets,filename),errors=[],warnings=[];if(periods.length&&(!periods.includes('2026-11')||periods.length>1))errors.push('檔案辨識到'+periods.join('、')+'，不可發布到11月個人台獎。');
- let ranking=null;for(const sh of sheets){const r=leaderboardFromSheet(sh);if(r&&r.leaderboard.length){ranking=r;break;}}
+ let ranking=null;for(const sh of sheets){const r=leaderboardFromSheet(sh);if(r&&r.leaderboard.length&&r.leaderboard.some(x=>x.actualBonus!==null||x.projectedBonus!==null||x.rank!==null)){ranking=r;break;}}
  let rawSheet=sheets.find(s=>(s.rows||[]).some((row,i)=>i<15&&row.some(v=>String(raw(v)??'').includes('手機競賽 個人上線數'))));if(!rawSheet)rawSheet=sheets.find(s=>(s.rows||[]).slice(0,20).flat().filter(v=>String(raw(v)??'').startsWith('上線數_')).length>=5);
  if(!rawSheet)errors.push('找不到個人手機競賽原始頁籤。');
  let parsed=null;if(rawSheet)try{parsed=parseRaw(rawSheet,config,storeDefs);warnings.push(...parsed.warnings);}catch(e){errors.push(e.message);}
  const leaderboard=ranking?.leaderboard?.length?ranking.leaderboard:(parsed?.fallback||[]).sort((a,b)=>(b.projectedBonus||0)-(a.projectedBonus||0));
  const thresholds=ranking?.thresholds||config.thresholds||{first:5000,second:9000},rankTiers=ranking?.rankTiers||[];
- if(!leaderboard.length)errors.push('找不到「獎金表」排行榜，也無法從原始頁取得獎金欄。');
+ if(!leaderboard.length)errors.push('找不到「獎金表」排行榜，也無法從原始頁取得獎金欄。');else if(!leaderboard.some(x=>x.actualBonus!==null||x.projectedBonus!==null||x.rank!==null))errors.push('已辨識同仁名單，但「實際總獎金／推估原始總獎金／排名」皆未讀到，為避免空白覆寫已停止發布。');
  return {periods,leaderboard,employees:parsed?.employees||[],storeStatus:parsed?.storeStatus||{},thresholds,rankTiers,errors:[...new Set(errors)],warnings:[...new Set(warnings)]};
 }
 function payoutRate(model,actual,target){if(!INT(actual)||!INT(target)||target<=0)return 0;const r=actual/target;if(r>=2)return model.rate200;if(r>=0.5)return model.rate50;return 0;}
