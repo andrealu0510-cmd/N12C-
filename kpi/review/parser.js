@@ -576,7 +576,11 @@ function prepareProfileDefinitions(header, mapping, definitions) {
 
 function profileBasisEvidence(header, definitions, mapping, rows, dateInfo, warnings) {
   if (!header.profile) return null;
+  // Early-month exports can have zero A/R targets while other ordinary KPIs
+  // already have targets. Use only verified ordinary counts/points as fallback;
+  // inverse, adjustment and ratio KPIs can never establish a calendar basis.
   const referenceKeys = ['a999', 'r999', 'r1399'];
+  const fallbackKeys = definitions.filter(d => d.key === 'broadband' || /^(?:MYVIDEO|KKBOX)$/.test(compact(d.sourceLabel))).map(d => d.key);
   const samplesFor = keys => {
     const samples = [];
     for (const [person, row] of rows.entries()) for (const key of keys) {
@@ -588,7 +592,13 @@ function profileBasisEvidence(header, definitions, mapping, rows, dateInfo, warn
     return samples;
   };
   const summary = samples => ({ sampleCount: samples.length, metricCount: new Set(samples.map(s => s.key)).size, employeeCount: new Set(samples.map(s => s.person)).size });
-  const samples = samplesFor(referenceKeys), counts = summary(samples);
+  let samples = samplesFor(referenceKeys), counts = summary(samples);
+  let referenceLabel = 'A999／R999／R1399';
+  if (counts.sampleCount < 3 || counts.metricCount < 2 || counts.employeeCount < 2) {
+    samples = samplesFor([...new Set([...referenceKeys, ...fallbackKeys])]);
+    counts = summary(samples);
+    referenceLabel = '上線數／寬頻／MyVideo／KKBOX';
+  }
   const evidence = { basis: 'unknown', ...counts, maxErrorPercentagePoints: null, reason: '' };
   const reliableDate = dateInfo && !warnings.some(w => /INVALID_REPORT_DATE|AMBIGUOUS_REPORT_DATE|REPORT_DATE_MISMATCH/.test(w.code))
     && (!dateInfo.period || dateInfo.period.start === `${dateInfo.month}-01`);
@@ -604,7 +614,7 @@ function profileBasisEvidence(header, definitions, mapping, rows, dateInfo, warn
     if (monthly.matches !== toDate.matches) {
       evidence.basis = monthly.matches ? 'month' : 'toDate';
       evidence.maxErrorPercentagePoints = (monthly.matches ? monthly : toDate).maxError;
-      evidence.reason = `${counts.sampleCount} 筆 A999／R999／R1399 原表進度與${evidence.basis === 'month' ? '整月目標按資料日進度' : '截至資料日目標'}一致；已排除 0% 及 250% 封頂值。`;
+      evidence.reason = `${counts.sampleCount} 筆 ${referenceLabel} 原表進度與${evidence.basis === 'month' ? '整月目標按資料日進度' : '截至資料日目標'}一致；已排除 0% 及 250% 封頂值。`;
     } else evidence.reason = monthly.matches ? '整月及截至當日兩種基準均吻合，現有資料無法區分。' : '原表進度未一致吻合整月或截至當日基準，保留原值並請確認。';
   }
   for (const def of definitions) {
@@ -694,3 +704,4 @@ export function inspectWorkbook(workbook, XLSX, options = {}) {
   if (candidates.length > 1) warnings.push(issue('MULTIPLE_CANDIDATE_SHEETS', '找到多張可能的人員績效工作表，請確認要匯入的頁籤。'));
   return { sheets, candidates: candidates.map(s => s.sheetName), recommendedSheet: candidates[0]?.sheetName || sheets[0]?.sheetName || null, warnings };
 }
+
