@@ -1,7 +1,7 @@
 /* N12C daily-review patch. Application code only; no report rows or credentials. */
 (function () {
   'use strict';
-  const VERSION = '2026-10-30.4';
+  const VERSION = '2026-11-04.1';
   const LOADER_VERSION = '2026-10-30.4';
   function upgradeHtml(input) {
     let html = String(input);
@@ -198,10 +198,14 @@
         if(/(?:搭售|投保|附掛)率/.test(label)&&!/(?:目標|達成|差異|去年|上月)/.test(label))candidates.push({r,c,label:String(value).trim()});
       });
     }
+    // The official 010508 workbook has the overall rate named 手機保險搭售率,
+    // followed by separate payment-plan 搭售率 columns. Match this exact
+    // heading, not a substring (which would also accept plan-specific rates).
+    const overall=candidates.filter(x=>/^(?:手機保險|行動裝置保險|保險)搭售率[%％]?$/.test(norm(x.label)));
     const preferred=candidates.filter(x=>/(?:整體|總|合計|TTL)/i.test(x.label));
-    const usable=preferred.length?preferred:candidates;
+    const usable=overall.length?[...overall,...preferred]:preferred.length?preferred:candidates;
     const columns=[...new Set(usable.map(x=>x.c))];
-    if(columns.length!==1)return{records:[],error:columns.length?'有多個搭售率欄位，請保留整體保險搭售率欄後貼上':'未辨識到保險搭售率欄位（不採用保險服務點數）'};
+    if(columns.length!==1)return{records:[],error:columns.length?'有多個無法確認的搭售率欄位，請確認整體保險搭售率表頭（不需刪除原檔欄位）':'未辨識到保險搭售率欄位（不採用保險服務點數）'};
     const col=columns[0],header=usable.filter(x=>x.c===col).at(-1),known=new Set(EXPECTED.map(p=>p.store));
     const people=new Set((state.people||[]).map(p=>String(p.empId)));
     const top=rows.slice(Math.max(0,header.r-2),header.r+1);
@@ -431,7 +435,7 @@
     }).join('\n\n');
     for(const kind of ['010508','010509']){
       const report=state.insurance?.[kind],raw=state.rawUploads?.[kind];
-      const message=kind+'｜'+(n12cBusy[kind]?'讀取中':n12cUploadErrors[kind]?'未更新：'+n12cUploadErrors[kind]:!raw?'尚未上傳':report?.error||((report?.records?.length||0)+'筆已連動'))+'｜資料日：'+(report?.date||'未辨識')+'\n來源：'+(raw?.source||'尚未上傳');
+      const message=kind+'｜'+(n12cBusy[kind]?'讀取中':n12cUploadErrors[kind]?'未更新：'+n12cUploadErrors[kind]:!raw?'尚未上傳':report?.error||((report?.records?.length||0)+'筆已連動'))+'｜資料日：'+(report?.date||'未辨識')+'\n來源：'+(raw?.source||'尚未上傳')+(report?.label?'\n採用欄位：'+report.label:'')+(report?.records?.length&&!report.date?'\n原表未辨識到資料截止日，請在下方確認日期；不採用下載或列印時間。':'');
       panel.textContent+='\n\n'+message;n12cUploadStatus(kind.slice(3),message,report?.records?.length&&!report.error&&!n12cUploadErrors[kind]?'ok':'warn');
     }
     const check=n12cPeriodReady(),rows=n12cScoreRows(),s=n12cTotals(rows);
@@ -491,3 +495,4 @@
   window.n12cUpgradeVersion=VERSION;
   window.n12cUpgradeLoaderVersion=LOADER_VERSION;
 })();
+
