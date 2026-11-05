@@ -29,7 +29,8 @@ function detectPeriod(sheets,filename=''){
  return [...set];
 }
 function summaryColumns(row){
- const vals=(row||[]).map(nrm);
+ // XLSX omits empty cells. Array.from fills sparse slots before string matching.
+ const vals=Array.from(row||[],nrm);
  const actual=vals.findIndex(x=>x==='實際總獎金'||x==='實際獎金'||x.includes('實際總獎金'));
  const projected=vals.findIndex(x=>x.startsWith('推估原始總獎金')||x.includes('推估原始總獎金')||x==='推估總獎金'||x.includes('推估總獎金'));
  const rank=vals.findIndex(x=>x==='排名'||x==='名次');
