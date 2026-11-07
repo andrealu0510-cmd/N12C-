@@ -1,11 +1,11 @@
-<!doctype html><html lang="zh-Hant"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex,nofollow"><meta name="referrer" content="no-referrer"><meta name="theme-color" content="#173b40"><title>北一二C｜11月個人台獎風雲榜</title><link rel="stylesheet" href="personal.css?v=1102-1"></head><body>
+<!doctype html><html lang="zh-Hant"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex,nofollow"><meta name="referrer" content="no-referrer"><meta name="theme-color" content="#173b40"><title>北一二C｜11月個人台獎風雲榜</title><link rel="stylesheet" href="personal.css?v=1107-1"></head><body>
 <header><a href="../portal/">‹ 工作窗口</a><b>北一二C｜台獎工作台</b><nav><a id="storeBonusLink" href="november.html">店獎總覽</a><a class="active" href="personal.html">個人風雲榜</a></nav><button id="logout" hidden>登出</button></header>
 <main>
 <section id="login" class="login"><small>2026年11月 · 個人台獎</small><h1 id="loginTitle">門市閱讀版</h1><p>沿用台獎閱讀密碼；管理員每天可直接上傳01-08-03店點Excel或01-08-04個人Excel，系統自動辨識。</p><form id="loginForm"><label id="employeeWrap" hidden>管理員員編<input id="employee" value="5512297" autocomplete="username"></label><label>密碼<div class="password"><input id="password" type="password" autocomplete="current-password" maxlength="128" required><button id="togglePassword" type="button">顯示</button></div></label><button id="loginSubmit" class="primary">登入個人風雲榜</button><p id="loginError" class="error"></p></form><a id="modeLink" href="?admin=1">管理員登入 →</a></section>
 <div id="workspace" hidden>
 <div class="toolbar"><div><b>個人台獎｜每日Excel一鍵更新</b><span id="phase">尚未讀取資料</span></div><div class="tools"><button id="uploadButton" class="primary" hidden>STEP 1 上傳Excel（03店點／04個人）</button><button id="exportButton">下載風雲榜4K PNG</button><button id="copyButton">複製群組提醒</button><button id="refreshButton">重讀共用資料</button></div></div>
 <p id="status" role="status"></p>
-<div class="tabs" role="tablist"><button class="tab active" data-tab="rank" role="tab">🏆 個人台獎風雲榜</button><button class="tab" data-tab="sim" role="tab">🎯 今日手機 → 明日試算</button></div>
+<div class="tabs" role="tablist"><button class="tab active" data-tab="rank" role="tab">🏆 個人台獎風雲榜</button><button class="tab" data-tab="sim" role="tab">🎯 今日手機 → 明日試算</button><button class="tab" data-tab="storeForecast" role="tab">🏪 店台獎 → 明日推估</button></div>
 <section id="rankTab" class="tabpage">
 <section id="rankBoard" class="board">
 <div class="boardhead"><div><small>DAILY BONUS LEADERBOARD · 北一二C</small><h1>11月｜個人台獎風雲榜</h1><p id="source">尚未匯入11月個人台獎Excel</p></div><div class="goal"><span>第一檻</span><strong id="firstGoal">$5,000</strong><small>進入領獎管理區</small></div><div class="goal second"><span>第二檻</span><strong id="secondGoal">$9,000</strong><small>個人台獎不折扣管理</small></div></div>
@@ -24,10 +24,22 @@
 <section class="panel"><div class="sectionhead"><div><h2>📱 今日手機試算</h2><p>今天欄位只存在目前瀏覽器，不會改共用Excel。明日正式數字仍以上傳後報表為準。</p></div><button id="showAllModels">只看重點／全部切換</button></div><div id="simTable" class="tablewrap"></div></section>
 <div id="simResult" class="simresult"></div>
 </section>
+<section id="storeForecastTab" class="tabpage" hidden>
+<section class="simhero"><div><small>STORE BONUS · SCENARIO ONLY</small><h1>全店今天做哪些，明日推估會增還是減？</h1><p>值班輸入全店新增與沖回，查看11組店長級距的明日推估。不是個人獎金，也不是完整店獎或保證實領。</p></div><div id="storeForecastBadge" class="fresh bad">等待資料</div></section>
+<div class="warning"><b>有做單，也可能下降。</b> 原表採日均推估，今天過完會增加分母天數；新增台數不夠、退件或沖回都可能使推估降級。排名、權數、資格與未納入項目仍可能變動。</div>
+<section class="selectors"><label>值班門市<select id="storeForecastStore" aria-label="值班門市"></select></label><button id="clearStoreForecast">清除本店今日試算</button></section>
+<p id="storeForecastBasis" class="hint"></p><p id="storeForecastSource" class="hint"></p>
+<p id="storeForecastNotice" class="warning" role="status" hidden></p><p id="storeForecastErrors" class="warning" role="status"></p>
+<div id="storeForecastSummary" class="summarycards"></div>
+<section class="panel"><div class="sectionhead"><div><h2>今天全店有效上線變動</h2><p>只填03基準日之後、今天尚未入表的數量。同機款填全店合計；退件／沖回另填正數，由系統扣除。空機與未列機款不計入，請勿重複填個人試算數字。</p></div></div><p class="hint">欄位只供本頁試算，不儲存至共用資料；重整、登出或基準更新後清除。空白不代表0，無變動請填0。手機可左右滑動表格。</p><div id="storeForecastTable" class="tablewrap" tabindex="0" aria-label="店台獎試算表，可左右捲動"></div></section>
+<div id="storeForecastResult" class="simresult" aria-live="polite"></div>
+<div class="warning"><b>明日完整店獎／可領金額：目前無法可靠預測。</b> 本頁只算11組店長級距小計，不把小計增減加到Excel原表總獎金，不推測排名權數、領獎Y／N、空機及其他競賽組。正式結果與實際核發仍以後續Excel及營管D+30最終版為準。</div>
+</section>
 <p id="exportStatus" role="status"></p><a id="imageLink" hidden target="_blank" rel="noopener">開啟剛匯出的原圖</a>
 <p class="legal">僅供內部管理｜個人名次與獎金以營管D+30最終版為準。明日試算不預測全公司排名變動與排名權數。</p>
 </div></main>
 <input id="fileInput" type="file" accept=".xlsx,.xlsm,.csv,.tsv,.txt" hidden>
 <dialog id="importDialog"><div class="sectionhead"><h2>STEP 2｜核對台獎Excel</h2><button id="cancelImport">關閉 ×</button></div><p id="filename"></p><div id="preview" class="tablewrap"></div><p id="importWarnings"></p><label>報表截至日<input id="reportDate" type="date" min="2026-11-01" max="2026-11-30"></label><p class="hint">請填Excel實際資料截至日。03店點檔會更新九店＋北一二C；04個人檔會更新風雲榜。兩邊都截至「昨天」時，今日→明日試算才會開啟。</p><label class="check"><input id="ack" type="checkbox">已確認為11月台獎Excel、月份／店點／名單／數字正確；系統辨識用途無誤後同步。</label><p id="publishMessage" class="error"></p><button id="publishButton" class="primary" disabled>確認更新並發布</button></dialog>
 <textarea id="copyArea" hidden></textarea>
-<script src="parser.js?v=1102-2"></script><script src="november-core.js?v=1103-1"></script><script src="personal-core.js?v=1105-1"></script><script src="personal-ui.js?v=1104-1"></script></body></html>
+<script src="parser.js?v=1102-2"></script><script src="november-core.js?v=1103-1"></script><script src="personal-core.js?v=1105-1"></script><script src="store-forecast-core.js?v=1107-1"></script><script src="store-forecast-ui.js?v=1107-1"></script><script src="personal-ui.js?v=1107-1"></script></body></html>
+
