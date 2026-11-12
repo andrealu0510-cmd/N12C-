@@ -1,0 +1,46 @@
+/* 2026.11 DS personal incentive estimator. Rules are transcribed from the supplied Y2611 DS incentive deck. */
+(function(root){'use strict';
+const n=v=>Math.max(0,Number(v)||0),sum=a=>a.reduce((s,x)=>s+n(x),0);
+const accessories=[
+ ['acc_combo','Logitech Combo Touch 鍵盤',123],['acc_aerofit','Soundcore AeroFit 2 AI 翻譯開放式藍牙耳機',100],['acc_gpro_tkl','羅技 G PRO X TKL RAPID 電競鍵盤',70],
+ ['acc_aiwa_bt','AIWA 藍牙耳機',59],['acc_gc_torras','Golden Concept iPhone18／TORRAS Duo 指定保護殼',59],['acc_hipporizz','Hipporizz iPhone17 指定保護殼',59],['acc_hoda_ar','hoda AR 抗反射抗藍光玻璃保護貼 iPhone17／18',59],['acc_imos','imos iPhone17／18／Duo 指定保護貼',59],['acc_maxia5k','MAXIA 5000mAh 行動電源',59],['acc_reno_case','OPPO Reno16／16F 冰鑽磁吸支架防摔保護殼',59],['acc_pqi23','PQI 23W 三合一 MagSafe 磁吸充電座',59],['acc_sam45w','Samsung 45W 20000mAh 行動電源',59],['acc_s26_case','Samsung S26 PureGear 冰鑽防摔磁吸支架保護殼',59],['acc_mx4','羅技 MX Master4 For Mac 無線滑鼠',59],['acc_superlight','羅技 G PRO X SUPERLIGHT 2SE 電競滑鼠',59],
+ ['acc_sam25w','Samsung 25W 10000mAh 無線閃充行動電源',47],['acc_windrises','Wind Rises iPhone17／18 指定保護殼',47],
+ ['acc_laut_torras','LAUT／TORRAS iPhone17／18 指定保護殼',41],['acc_lift','羅技 Lift for Mac 人體工學垂直滑鼠',41],
+ ['acc_hoda18','hoda iPhone18 指定保護殼',35],['acc_hoda_privacy','hoda 滿版／極透防窺玻璃保護貼 iPhone17／18',35],['acc_hoda_pixel','hoda Pixel 11 滿版玻璃保護貼',35],['acc_maxia_case','MAXIA iPhone18／Duo 指定保護殼、保護貼',35],['acc_pqi65','PQI 65W GaN 充電器＋USB-C 編織線',35],
+ ['acc_aiwa_h06','AIWA AT-H06 EDGE 耳夾式藍牙耳機',30],['acc_power10k','Anker／ONPRO／ASPOR／LAPO／PQI／Mycell 10000mAh 行動電源',30],['acc_power5k','artmo／Energea／ONPRO 5000mAh 行動電源',30],['acc_iphone18_case','ESR／imos／LAUT／Mobi Mate／SKINARMA／SOLiDE／TORRAS／UAG／Uniq／Vicxxo iPhone18／Duo 保護殼',30],['acc_wireless','Gigastone／Energea／PQI 無線充電座',30],['acc_iphone17_case','HODA／TORRAS／LAUT／SKINARMA／SOLiDE／ZAGG iPhone17 保護殼',30],['acc_pixel11_case','Mobi Mate Pixel 11 膚感磁吸保護殼',30],['acc_razr_case','Mobi Mate moto razr fold 保護殼',30],['acc_a27_360','Mobi Mate Samsung A27 360度磁吸站立保護殼',30],['acc_a27_lens','Mobi Mate Samsung A27 鏡頭立架磁吸保護殼',30],['acc_flip8_case','Mobi Mate Samsung Z Flip8 撞色皮革磁吸保護殼',30],['acc_onelink','Momax ONELINK 8合1 USB-C 轉接器',30],['acc_pqi9h','PQI 9H 康寧玻璃保護貼 iPhone17',30],['acc_cloudbag','PQI 雲朵包 13／14吋',30],['acc_pqi_onpro','PQI／ONPRO 充電器',30],['acc_xperia_case','SONY Xperia 1 VIII Mobi Mate 側掀皮套',30],['acc_urban_bag','SwitchEasy Urban MacBook 收納包14吋',30],['acc_yadi','YADI MacBook 水之鏡防窺片',30],['acc_k580','羅技 K580 無線鍵盤',30],
+ ['acc_cable','AcerGaming／ONPRO／Energea 充電線',18],['acc_case18','apbs／artmo／Mobi Mate／SwitchEasy／Uniq／犀牛盾 iPhone17／18 保護殼',18],['acc_car65','Gigastone 65W 雙孔車用充電器',18],['acc_metalslim3','Metal-Slim 三用磁吸鋁合金支架',18],['acc_vacuum','Metal-Slim 真空磁吸支架',18],['acc_cardwallet','Metal-Slim 磁吸支架卡包',18],['acc_vibego','Momax 1-Vibe Go 磁吸支架無線音箱',18],['acc_firebag','Momax 1-World Airliner 防火袋M',18],['acc_momax5k','Momax／MOVESPEED 5000mAh 行動電源',18],['acc_charger','ONPRO／Gigastone／LAPO 充電器',18],['acc_earbuds','PHILIPS／PQI 藍牙耳機',18],['acc_pqi25d','PQI 2.5D 9H iPhone18 玻璃保護貼',18],['acc_hub','PQI 5 in 1 USB-C 多功能集線器',18],['acc_keyfilm','PQI MacBook 快捷鍵鍵盤膜',18],['acc_chargekit','PQI／Gigastone 充電組合包',18],['acc_fan','Solide／PureGear／LaPO 風扇',18],['acc_cyprus','UNIQ Cyprus RE 筆電收納包14吋',18],['acc_natgeo','極稚／NatGeo iPhone17 保護殼',18],
+ ['acc_stylus','Kobo Stylus 2 觸控筆',13],['acc_neckfan','Aecooly Halo04 PE02 頸掛折疊風扇',9],['acc_kobo_case','Kobo Libra Colour 原廠磁感應保護殼',7]
+].map(x=>({id:x[0],name:x[1],unit:x[2]}));
+const opLife=[
+ ['op_video_elite','影音劇院｜菁英',350,'影音劇院'],['op_video_advanced','影音劇院｜進階',1760,'影音劇院'],['op_video_flagship','影音劇院｜旗艦',1173,'影音劇院'],
+ ['op_game_gcloud','遊戲玩家｜G Cloud',586,'遊戲玩家'],['op_game_ps5slim','遊戲玩家｜PS5 Slim 數位版雙控制器同捆',293,'遊戲玩家'],['op_game_legion','遊戲玩家｜Lenovo Legion Tab 電競平板',586,'遊戲玩家'],['op_game_xiaomi','遊戲玩家｜小米×羅技電競套裝',128,'遊戲玩家'],['op_game_gta6','遊戲玩家｜PS5 雙控 GTA6 同捆套裝',293,'遊戲玩家'],
+ ['op_home_robot','智慧家庭｜SwitchBot 掃地機器人＋主控機器人',293,'智慧家庭'],['op_home_air','智慧家庭｜SwitchBot 空氣清淨機＋Google TV Streamer',117,'智慧家庭'],['op_home_guard','智慧家庭｜SwitchBot 智慧影像門衛',293,'智慧家庭'],
+ ['op_tech_kobo','科技生活｜樂天 Kobo 套裝',105,'科技生活'],['op_tech_tablet','科技生活｜AI 全能智慧平板',123,'科技生活'],['op_tech_neo','科技生活｜MacBook Neo＋羅技 Lift',41,'科技生活'],['op_tech_air','科技生活｜MacBook Air 套裝',58,'科技生活'],['op_tech_pro','科技生活｜MacBook Pro 套裝',58,'科技生活'],['op_tech_mini','科技生活｜Mac mini 套裝',29,'科技生活'],['op_tech_even','科技生活｜Even Realities AI 眼鏡套裝',293,'科技生活'],['op_tech_vive','科技生活｜HTC VIVE Eagle／Round AI 眼鏡套裝',268,'科技生活','vive']
+].map(x=>({id:x[0],name:x[1],unit:x[2],group:x[3],special:x[4]||''}));
+const opening=[
+ ['open_limited_2','限時專案｜1號雙響',1290],['open_limited_4','限時專案｜1號四響',1613],['open_limited_4p','限時專案｜1號四響＋',1807],
+ ['open_ref_2','推薦有禮｜1號雙響',147],['open_ref_4','推薦有禮｜1號四響',293],['open_ref_4p','推薦有禮｜1號四響＋',366]
+].map(x=>({id:x[0],name:x[1],unit:x[2]}));
+const aq={
+ KT:{label:'K／T',tier:[2,4],catv:175,dtv:45,bands:{'60M':{24:[220,255,295],36:[265,315,360]},'150M':{24:[500,585,675],36:[610,720,825]},'300M':{24:[585,685,790],36:[715,840,965]},'500M':{24:[725,850,980],36:[885,1040,1195]},'1G':{24:[725,850,980],36:[885,1040,1195]},'3G':{24:[1005,1180,1360],36:[1225,1445,1660]}}},
+ TBC:{label:'TBC／DMG／SDTV',tier:[1,2],catv:115,dtv:0,bands:{'60M／66M／70M':{24:[250,295,340],36:[310,365,415]},'120M／150M':{24:[535,625,720],36:[650,765,880]},'300M／360M':{24:[615,725,835],36:[755,885,1020]},'500M／1G／1.2G':{24:[755,890,1025],36:[925,1090,1250]}}},
+ TOP:{label:'TOP',tier:[1,2],catv:115,dtv:0,bands:{'60M':{24:[250,295,340],36:[310,365,415]},'120M／150M':{24:[420,495,570],36:[515,605,695]},'300M':{24:[495,580,670],36:[605,710,815]},'600M':{24:[540,635,730],36:[660,780,895]},'1G':{24:[630,740,850],36:[770,905,1040]}}},
+ HP:{label:'HP',tier:[1,2],catv:115,dtv:0,bands:{'60M':{24:[270,315,365],36:[330,385,445]},'120M／150M':{24:[405,475,545],36:[495,580,670]},'300M':{24:[450,530,605],36:[550,645,740]},'600M':{24:[540,635,730],36:[660,775,890]},'1G':{24:[675,790,910],36:[825,970,1115]}}}
+};
+const mobileTiers=['998以下','999～1198','1199～1398','1399～1598','1599以上'];
+const bbTiers=['70M以下','120M～150M','200M～360M','500M～1.2G','K／T 3G'];
+function emptyState(){return {accessoryRows:[],wrapFull:0,wrapPhone:0,aqRows:[],aqDtv:0,aqCatv:{KT:0,TBC:0,TOP:0,HP:0},ktNoContractCatv:0,kt1gBand:'unknown',rtRows:[],insurance:0,tradeSpecified:0,tradeGeneral:0,card:0,opRows:[],opening:{}};}
+function tierIndex(area,total){const t=aq[area]?.tier||[1,2];if(area==='KT')return total>=5?2:total>=3?1:0;return total>=3?2:total>=2?1:0;}
+function calculate(state,phoneBase){state=state||emptyState();const rows=Array.isArray(state.accessoryRows)?state.accessoryRows:[];let acc=0;for(const r of rows){const it=accessories.find(x=>x.id===r.item);if(it)acc+=it.unit*n(r.qty);}acc+=32*n(state.wrapFull)+18*n(state.wrapPhone);
+ const aqRows=Array.isArray(state.aqRows)?state.aqRows:[],areaTotals={KT:0,TBC:0,TOP:0,HP:0};for(const r of aqRows)if(areaTotals[r.area]!==undefined)areaTotals[r.area]+=n(r.qty);let aqBase=0,kt1gCount=0;for(const r of aqRows){const table=aq[r.area]?.bands?.[r.band]?.[Number(r.term)||24];if(!table)continue;const unit=table[tierIndex(r.area,areaTotals[r.area])];const factor=r.half?.toString()==='true'||r.half===true?.5:1;aqBase+=unit*n(r.qty)*factor;if(r.area==='KT'&&r.band==='1G')kt1gCount+=n(r.qty);}aqBase+=45*n(state.aqDtv);for(const area of Object.keys(areaTotals))aqBase+=aq[area].catv*n(state.aqCatv?.[area]);aqBase+=55*n(state.ktNoContractCatv);
+ let topAdd=0;const topTotal=areaTotals.TOP;if(topTotal>=5)topAdd=200;else if(topTotal===4)topAdd=150;else if(topTotal===3)topAdd=100;aqBase+=topAdd;
+ const band=String(state.kt1gBand||'unknown'),ktUnit=band==='420'?175:band==='480'?295:band==='540'?410:0,ktConditional=kt1gCount*ktUnit;
+ let rt=0;for(const r of Array.isArray(state.rtRows)?state.rtRows:[]){const qty=n(r.qty);let add=0;if(r.mode==='chengshuang')add=55*Math.max(0,(Number(r.newMobile)||0)-(Number(r.oldMobile)||0));else if(r.mode==='addon')add=25*(Math.max(0,(Number(r.newMobile)||0)-(Number(r.oldMobile)||0))+Math.max(0,(Number(r.newBB)||0)-(Number(r.oldBB)||0)));rt+=(23+add+(r.kt3g?175:0))*qty;}
+ const insurance=18*n(state.insurance),trade=235*n(state.tradeSpecified)+176*n(state.tradeGeneral),card=44*n(state.card);
+ let op=0;for(const r of Array.isArray(state.opRows)?state.opRows:[]){const it=opLife.find(x=>x.id===r.item);if(!it)continue;const q=n(r.qty),unit=it.special==='vive'?(q>=2?542:268):it.unit;op+=unit*q;}
+ let open=0;for(const it of opening)open+=it.unit*n(state.opening?.[it.id]);
+ const categories=[{id:'accessory',name:'配件／包膜',amount:acc,rank:'前85%'},{id:'goodSpeed',name:'好速案',amount:aqBase+rt,rank:'按件／條件'},{id:'insurance',name:'行動安心保',amount:insurance,rank:'前85%'},{id:'trade',name:'手機舊換新',amount:trade,rank:'前85%'},{id:'card',name:'Open Possible 聯名卡',amount:card,rank:'前85%'},{id:'opLife',name:'OP 響樂生活',amount:op,rank:'按件'},{id:'opening',name:'OP 開店包',amount:open,rank:'前85%'}];
+ const other=sum(categories.map(x=>x.amount)),phone=typeof phoneBase==='number'?phoneBase:null;return {phone,other,conditional:ktConditional,total:phone===null?null:phone+other,withConditional:phone===null?null:phone+other+ktConditional,categories,details:{areaTotals,topAdd,kt1gCount,ktUnit,aqBase,rt,acc,insurance,trade,card,op,open}};
+}
+root.NRewards={accessories,opLife,opening,aq,mobileTiers,bbTiers,emptyState,calculate};
+})(window);
